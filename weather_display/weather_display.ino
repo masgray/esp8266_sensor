@@ -59,15 +59,13 @@ int xPos = left;
 int xPosPred = left;
 int yPosPred = bottom;
 
-struct Unit
-{
-  float value;
-  uint32_t time;
-  bool hasValue;
-};
-
 constexpr uint32_t historyDepth = right - left;
-Unit pressureHistory[historyDepth];
+int pressureHistory[historyDepth] {};
+
+constexpr uint32_t historyTimeStep = 12*60*60*1000 / historyDepth;
+uint32_t historyTimeLastAdded = 0;
+
+uint32_t historyIndex = 0;
 
 void DrawSred(float value, float valueR, int x, int y);
 
@@ -275,7 +273,7 @@ void DrawSred(float value, float valueR, int x, int y)
 
 void DrawChart()
 {
-  double value = pressure - normalPressure + dPressure / 2;
+  /*double value = pressure - normalPressure + dPressure / 2;
   double yPos = bottom - (bottom - top) / dPressure * value;
   tft.setColor(VGA_LIME);
   if (xPos == left)
@@ -296,6 +294,23 @@ void DrawChart()
     tft.setColor(38, 84, 120);
     tft.fillRect(left, top, right, bottom);
   }
+  */
+  tft.setColor(38, 84, 120);
+  tft.fillRect(left, top, right, bottom);
+  tft.setColor(VGA_LIME);
+  if (pressureHistory[1] == 0)
+  {
+    tft.drawPixel(left, pressureHistory[0]);
+  }
+  else
+  {
+    for (int i = 1; i < historyDepth; ++i)
+    {
+      if (pressureHistory[i] == 0)
+        break;
+      tft.drawLine(left, pressureHistory[i - 1], left + 1, pressureHistory[i]);
+    }
+  }
   tft.setColor(VGA_WHITE);
 }
 
@@ -304,5 +319,19 @@ void AddToHistory()
   auto current = millis();
   Serial.print("Free heap: ");
   Serial.println(ESP.getFreeHeap());
+
+  if (current - historyTimeLastAdded > historyTimeStep || historyTimeLastAdded == 0)
+  {
+    historyTimeLastAdded = current;
+    if (historyIndex >= historyDepth)
+    {
+      memcpy(&pressureHistory[0], &pressureHistory[1], (historyDepth - 1) * sizeof(int));
+      historyIndex = historyDepth - 1;
+    }
+    double value = pressure - normalPressure + dPressure / 2;
+    double yPos = bottom - (bottom - top) / dPressure * value;
+    pressureHistory[historyIndex] = yPos;
+    ++historyIndex;
+  }
 }
 
