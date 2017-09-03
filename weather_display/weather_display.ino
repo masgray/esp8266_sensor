@@ -308,7 +308,7 @@ void DrawChart()
     {
       if (pressureHistory[i] == 0)
         break;
-      tft.drawLine(left, pressureHistory[i - 1], left + 1, pressureHistory[i]);
+      tft.drawLine(left + i - 1, pressureHistory[i - 1], left + i, pressureHistory[i]);
     }
   }
   tft.setColor(VGA_WHITE);
