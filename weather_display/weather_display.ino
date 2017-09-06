@@ -190,7 +190,7 @@ void CalcSred(float value, float valuePred, float& valueR, uint32_t& k)
   }
   else if (k > 2)
   {
-    float n = (k*valueR + temperature)/((k + 1)*valueR);
+    float n = (k*valueR + value)/((k + 1)*valueR);
     valueR *= n;
   }
   ++k;
@@ -273,28 +273,6 @@ void DrawSred(float value, float valueR, int x, int y)
 
 void DrawChart()
 {
-  /*double value = pressure - normalPressure + dPressure / 2;
-  double yPos = bottom - (bottom - top) / dPressure * value;
-  tft.setColor(VGA_LIME);
-  if (xPos == left)
-  {
-    tft.drawPixel(xPos, yPos);
-  }
-  else
-  {
-    tft.drawLine(xPosPred, yPosPred, xPos, yPos);
-  }
-  xPosPred = xPos;
-  yPosPred = yPos;
-  
-  ++xPos;
-  if (xPos > right)
-  {
-    xPos = left;
-    tft.setColor(38, 84, 120);
-    tft.fillRect(left, top, right, bottom);
-  }
-  */
   tft.setColor(38, 84, 120);
   tft.fillRect(left, top, right, bottom);
   tft.setColor(VGA_LIME);
