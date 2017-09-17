@@ -7,10 +7,9 @@
 
 extern uint8_t Retro8x16[];
 
-constexpr int GPIO_CS = 10;//Not used, because of HW SPI
 constexpr int GPIO_RS = 5;
 
-UTFT tft(ILI9225B, GPIO_CS, NOTINUSE, GPIO_RS);
+UTFT tft(ILI9225B, NOTINUSE, NOTINUSE, GPIO_RS);
 
 extern unsigned short Background[];
 
@@ -34,6 +33,8 @@ PubSubClient mqttClient(MqttServer, MqttPort, OnMessageArrived, wifiClient);
 float temperature = NAN;
 float humidity = NAN;
 float pressure = NAN;
+float pressureMin = 730.0;
+float pressureMax = 750.0;
 float temperaturePred = NAN;
 float humidityPred = NAN;
 float pressurePred = NAN;
@@ -52,15 +53,15 @@ constexpr double left = 6;
 constexpr double right = 172;
 constexpr double top = 100;
 constexpr double bottom = 184;
-constexpr double dPressure = 40;
-constexpr double normalPressure = 740;
+constexpr double minDiapPressure = 20;
+double dPressure = minDiapPressure;
 
 int xPos = left;
 int xPosPred = left;
 int yPosPred = bottom;
 
 constexpr uint32_t historyDepth = right - left;
-int pressureHistory[historyDepth] {};
+float pressureHistory[historyDepth] {};
 
 constexpr uint32_t historyTimeStep = 12*60*60*1000 / historyDepth;
 uint32_t historyTimeLastAdded = 0;
@@ -71,6 +72,8 @@ void DrawSred(float value, float valueR, int x, int y);
 
 void setup()
 {
+  pinMode(GPIO_RS, OUTPUT);
+  
   Serial.begin(115200);
   while (!Serial)
   {
@@ -271,22 +274,27 @@ void DrawSred(float value, float valueR, int x, int y)
     DrawStable(x, y);
 }
 
+int CalcY(float p)
+{
+  double yPos = bottom - (bottom - top) / dPressure * (p - pressureMin);
+  return yPos;
+}
+
 void DrawChart()
 {
   tft.setColor(38, 84, 120);
   tft.fillRect(left, top, right, bottom);
   tft.setColor(VGA_LIME);
-  if (pressureHistory[1] == 0)
+
+  if (historyIndex < 2)
   {
-    tft.drawPixel(left, pressureHistory[0]);
+    tft.drawPixel(left, CalcY(pressureHistory[0]));
   }
   else
   {
-    for (int i = 1; i < historyDepth; ++i)
+    for (int i = 1; i <= historyIndex; ++i)
     {
-      if (pressureHistory[i] == 0)
-        break;
-      tft.drawLine(left + i - 1, pressureHistory[i - 1], left + i, pressureHistory[i]);
+      tft.drawLine(left + i - 1, CalcY(pressureHistory[i - 1]), left + i, CalcY(pressureHistory[i]));
     }
   }
   tft.setColor(VGA_WHITE);
@@ -306,9 +314,14 @@ void AddToHistory()
       memcpy(&pressureHistory[0], &pressureHistory[1], (historyDepth - 1) * sizeof(int));
       historyIndex = historyDepth - 1;
     }
-    double value = pressure - normalPressure + dPressure / 2;
-    double yPos = bottom - (bottom - top) / dPressure * value;
-    pressureHistory[historyIndex] = yPos;
+    if (pressure < pressureMin)
+      pressureMin = pressure;
+    if (pressure > pressureMax)
+      pressureMax = pressure;
+    double dPressure = pressureMax - pressureMin;
+    if (dPressure < minDiapPressure)
+      dPressure = minDiapPressure;
+    pressureHistory[historyIndex] = pressure;
     ++historyIndex;
   }
 }
