@@ -292,7 +292,7 @@ void DrawChart()
   }
   else
   {
-    for (int i = 1; i <= historyIndex; ++i)
+    for (int i = 1; i < historyIndex; ++i)
     {
       tft.drawLine(left + i - 1, CalcY(pressureHistory[i - 1]), left + i, CalcY(pressureHistory[i]));
     }
