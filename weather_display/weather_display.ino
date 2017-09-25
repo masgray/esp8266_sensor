@@ -53,8 +53,6 @@ constexpr double left = 6;
 constexpr double right = 172;
 constexpr double top = 100;
 constexpr double bottom = 184;
-constexpr double minDiapPressure = 20;
-double dPressure = minDiapPressure;
 
 int xPos = left;
 int xPosPred = left;
@@ -276,7 +274,7 @@ void DrawSred(float value, float valueR, int x, int y)
 
 int CalcY(float p)
 {
-  double yPos = bottom - (bottom - top) / dPressure * (p - pressureMin);
+  double yPos = bottom - (bottom - top) / (pressureMax - pressureMin) * (p - pressureMin);
   return yPos;
 }
 
@@ -318,9 +316,6 @@ void AddToHistory()
       pressureMin = pressure;
     if (pressure > pressureMax)
       pressureMax = pressure;
-    double dPressure = pressureMax - pressureMin;
-    if (dPressure < minDiapPressure)
-      dPressure = minDiapPressure;
     pressureHistory[historyIndex] = pressure;
     ++historyIndex;
   }
