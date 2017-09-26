@@ -3,11 +3,14 @@
 #include <PubSubClient.h>
 #include <ESP8266WiFi.h>
 
-#include <TFT_eSPI.h>
+#include <UTFT.h>
 
 extern uint8_t Retro8x16[];
+extern uint8_t Arial_round_16x24[];
 
-TFT_eSPI tft = TFT_eSPI();
+constexpr int GPIO_RS = 5;
+
+UTFT tft(ILI9341_S5P, NOTINUSE, NOTINUSE, GPIO_RS);
 
 extern unsigned short Background[];
 
@@ -48,9 +51,9 @@ uint32_t updatedOld = 0;
 uint32_t cycleTime = 0;
 
 constexpr double left = 6;
-constexpr double right = 172;
-constexpr double top = 100;
-constexpr double bottom = 184;
+constexpr double right = 236;
+constexpr double top = 125;
+constexpr double bottom = 284;
 
 int xPos = left;
 int xPosPred = left;
@@ -68,16 +71,16 @@ void DrawSred(float value, float valueR, int x, int y);
 
 void setup()
 {
+  pinMode(GPIO_RS, OUTPUT);
+  
   Serial.begin(115200);
   while (!Serial)
   {
     //Wait
   }
 
-  tft.init();
-  tft.setRotation(0);
-  tft.fillScreen(TFT_BLACK);
-  tft.setFont(Retro8x16);
+  tft.InitLCD(PORTRAIT);
+  tft.clrScr();
   tft.setColor(VGA_WHITE);
   tft.setBackColor(38, 84, 120);
 
@@ -111,31 +114,33 @@ void loop()
   {
     updatedOld = updated;
 
+    tft.setFont(Arial_round_16x24);
     if (temperature != NAN)
     {
       dtostrf(temperature, 4, 1, msg);
-      tft.print(msg, 26, 18);
-      DrawSred(temperature, temperatureR, 76, 30);
+      tft.print(msg, 24, 28);
+      DrawSred(temperature, temperatureR, 110, 33);
     }
 
     if (humidity != NAN)
     {
       dtostrf(humidity, 3, 0, msg);
-      tft.print(msg, 116, 18);
-      DrawSred(humidity, humidityR, 161, 30);
+      tft.print(msg, 152, 28);
+      DrawSred(humidity, humidityR, 226, 33);
     }
   
     if (pressure != NAN)
     {
       dtostrf(pressure, 4, 0, msg);
-      tft.print(msg, 54, 64);
-      DrawSred(pressure, pressureR, 93, 67);
+      tft.print(msg, 60, 64+26);
+      DrawSred(pressure, pressureR, 146, 67+26);
       DrawChart();
     }
   }
 
   sprintf(msg, "%d ", (current - updatedOld)/1000);
-  tft.print(msg, 140, 196);
+  tft.setFont(Retro8x16);
+  tft.print(msg, 198, 300);
 }
 
 void ConnectToWiFi()

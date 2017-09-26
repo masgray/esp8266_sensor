@@ -13,7 +13,7 @@
   #define PROGMEM
   #define fontdatatype const unsigned char
 #elif defined(ESP8266)
-        #include <pgmspace.h>
+  #include <pgmspace.h>
   #define fontdatatype const uint8_t
 #endif
 
