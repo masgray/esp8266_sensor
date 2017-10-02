@@ -117,7 +117,7 @@ void loop()
     tft.setFont(Arial_round_16x24);
     if (temperature != NAN)
     {
-      dtostrf(temperature, 4, 1, msg);
+      dtostrf(temperature, 3, 0, msg);
       tft.print(msg, 24, 28);
       DrawSred(temperature, temperatureR, 110, 33);
     }
