@@ -1,3 +1,4 @@
 
-esp_sensors/pass.h
+esp_sensor_bme280/pass.h
+esp_sensor_dht12/pass.h
 weather_display/pass.h
