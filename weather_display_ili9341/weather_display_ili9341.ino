@@ -2,6 +2,7 @@
 
 #include <PubSubClient.h>
 #include <ESP8266WiFi.h>
+#include <Wire.h>
 
 #include <UTFT.h>
 
@@ -9,6 +10,9 @@ extern uint8_t Retro8x16[];
 extern uint8_t Arial_round_16x24[];
 
 constexpr int GPIO_RS = 5;
+constexpr uint8_t Dht12Address = 0x5c;
+constexpr int GPIO_I2C_CLK = 4;
+constexpr int GPIO_I2C_DATA = 2;
 
 UTFT tft(ILI9341_S5P, NOTINUSE, NOTINUSE, GPIO_RS);
 
@@ -23,10 +27,6 @@ constexpr const char *Device1Sensor2 PROGMEM= "unit1/device1/sensor2/status";
 constexpr const char *Device1Sensor3 PROGMEM= "unit1/device1/sensor3/status";
 constexpr const char *Device1Error PROGMEM= "unit1/device1/error/status";
 constexpr const char *Device1Hello PROGMEM= "unit1/device1/hello/status";
-constexpr const char *Device3Sensor1 PROGMEM= "unit1/device3/sensor1/status";
-constexpr const char *Device3Sensor2 PROGMEM= "unit1/device3/sensor2/status";
-constexpr const char *Device3Error PROGMEM= "unit1/device3/error/status";
-constexpr const char *Device3Hello PROGMEM= "unit1/device3/hello/status";
 
 void ConnectToWiFi();
 void MqttConnect();
@@ -59,7 +59,6 @@ float roomHumidity = NAN;
 float roomHumidityPred = NAN;
 float roomHumidityR = NAN;
 uint32_t roomHumidityK = 0;
-int roomErrorCode = 0;
 
 uint32_t updated = 0;
 uint32_t updatedOld = 0;
@@ -93,6 +92,7 @@ void setup()
   {
     //Wait
   }
+  Wire.begin(GPIO_I2C_DATA, GPIO_I2C_CLK);
 
   tft.InitLCD(PORTRAIT);
   tft.clrScr();
@@ -112,6 +112,7 @@ void setup()
 void loop()
 {
   static char msg[32];
+  static char msg2[64];
 
   if (!mqttClient.connected()) 
   {
@@ -124,7 +125,9 @@ void loop()
     return;
 
   cycleTime = current;
-    
+
+  ReadDHT12Sensor();
+
   if (updated != updatedOld)
   {
     updatedOld = updated;
@@ -133,29 +136,51 @@ void loop()
     if (temperature != NAN)
     {
       dtostrf(temperature, 3, 0, msg);
-      tft.print(msg, 24, 10);
-      DrawaArrow(temperature, temperatureR, 110, 15);
+      if (temperature >= 0.0)
+      {
+        char* p = msg;
+        while(*p == ' ' && *p != 0)
+          ++p;
+        sprintf(msg2, "+%s", p);
+        tft.print(msg2, 24, 14);
+      }
+      else
+      {
+        tft.print(msg, 24, 14);
+      }
+      DrawaArrow(temperature, temperatureR, 100, 19);
     }
 
     if (roomTemperature != NAN)
     {
       dtostrf(roomTemperature, 3, 0, msg);
-      tft.print(msg, 24, 38);
-      DrawaArrow(roomTemperature, roomTemperatureR, 110, 43);
+      if (roomTemperature >= 0.0)
+      {
+        char* p = msg;
+        while(*p == ' ' && *p != 0)
+          ++p;
+        sprintf(msg2, "+%s", p);
+        tft.print(msg2, 24, 42);
+      }
+      else
+      {
+        tft.print(msg, 24, 42);
+      }
+      DrawaArrow(roomTemperature, roomTemperatureR, 100, 47);
     }
 
     if (humidity != NAN)
     {
       dtostrf(humidity, 3, 0, msg);
-      tft.print(msg, 152, 10);
-      DrawaArrow(humidity, humidityR, 226, 15);
+      tft.print(msg, 152, 14);
+      DrawaArrow(humidity, humidityR, 216, 19);
     }
   
     if (roomHumidity != NAN)
     {
       dtostrf(roomHumidity, 3, 0, msg);
-      tft.print(msg, 152, 38);
-      DrawaArrow(roomHumidity, roomHumidityR, 226, 43);
+      tft.print(msg, 152, 42);
+      DrawaArrow(roomHumidity, roomHumidityR, 216, 47);
     }
   
     if (pressure != NAN)
@@ -190,24 +215,38 @@ void ConnectToWiFi()
 
 void MqttConnect()
 {
-  Serial.println("Connecting to MQTT server");
+  Serial.println("Connecting to MQTT server...");
   if (!mqttClient.connect(deviceId))//, mqtt_user, mqtt_passw
   {
     Serial.println("Could not connect to MQTT server");
     return;
   }
   Serial.println("Connected to MQTT server");
-  mqttClient.subscribe(prefix); // for receiving HELLO messages from IoT Manager
-  mqttClient.subscribe(Device1Sensor1);
-  mqttClient.subscribe(Device1Sensor2);
-  mqttClient.subscribe(Device1Sensor3);
-  mqttClient.subscribe(Device1Error);
-  mqttClient.subscribe(Device1Hello);
 
-  mqttClient.subscribe(Device3Sensor1);
-  mqttClient.subscribe(Device3Sensor2);
-  mqttClient.subscribe(Device3Error);
-  mqttClient.subscribe(Device3Hello);
+  if (!mqttClient.subscribe(Device1Sensor1))
+  {
+    Serial.print("Could not subscribe to topic: ");
+    Serial.println(Device1Sensor1);
+    return;
+  }
+  if (!mqttClient.subscribe(Device1Sensor2))
+  {
+    Serial.print("Could not subscribe to topic: ");
+    Serial.println(Device1Sensor1);
+    return;
+  }
+  if (!mqttClient.subscribe(Device1Sensor3))
+  {
+    Serial.print("Could not subscribe to topic: ");
+    Serial.println(Device1Sensor1);
+    return;
+  }
+  if (!mqttClient.subscribe(Device1Error))
+  {
+    Serial.print("Could not subscribe to topic: ");
+    Serial.println(Device1Sensor1);
+    return;
+  }
 }
 
 bool StrEq(const char* s1, const char* s2)
@@ -243,17 +282,8 @@ void OnMessageArrived(char* topic, byte* payload, unsigned int length)
   buffer[length] = 0;
   memcpy(buffer, payload, length);
   String text(buffer);
-  if (StrEq(topic, Device1Hello))
-  {
-    Serial.print("HELLO from device 1 received, reconnect counter: ");
-    Serial.println(text);
-  }
-  if (StrEq(topic, Device3Hello))
-  {
-    Serial.print("HELLO from device 3 received, reconnect counter: ");
-    Serial.println(text);
-  }
-  else if (StrEq(topic, Device1Sensor1))
+
+  if (StrEq(topic, Device1Sensor1))
   {
     temperaturePred = temperature;
     temperature = text.toFloat();
@@ -272,25 +302,9 @@ void OnMessageArrived(char* topic, byte* payload, unsigned int length)
     CalcSred(pressure, pressurePred, pressureR, pressureK);
     AddToHistory();
   }
-  else if (StrEq(topic, Device3Sensor1))
-  {
-    roomTemperaturePred = roomTemperature;
-    roomTemperature = text.toFloat();
-    CalcSred(roomTemperature, roomTemperaturePred, roomTemperatureR, roomTemperatureK);
-  }
-  else if (StrEq(topic, Device3Sensor2))
-  {
-    roomHumidityPred = roomHumidity;
-    roomHumidity = text.toFloat();
-    CalcSred(roomHumidity, roomHumidityPred, roomHumidityR, roomHumidityK);
-  }
   else if (StrEq(topic, Device1Error))
   {
     errorCode = text.toInt();
-  }
-  else if (StrEq(topic, Device3Error))
-  {
-    roomErrorCode = text.toInt();
   }
 }
 
@@ -376,5 +390,49 @@ void AddToHistory()
     pressureHistory[historyIndex] = pressure;
     ++historyIndex;
   }
+}
+
+bool ReadI2C(uint8_t deviceAdress, uint8_t registerAdress, uint8_t* buffer, size_t toRead)
+{
+  Wire.beginTransmission(deviceAdress);
+  Wire.write(registerAdress);
+  Wire.endTransmission();
+  auto n = Wire.requestFrom(deviceAdress, static_cast<uint8_t>(toRead));
+  if (n != toRead)
+    return false;
+  for (int i = 0; i < toRead; ++i)
+    buffer[i] = Wire.read();
+  return true;
+}
+
+bool ReadDHT12Sensor(void)
+{
+    static uint8_t buf[5] = {0};
+    if (!ReadI2C(Dht12Address, 0, &buf[0], 5))
+    {
+      Serial.println("Error reading DHT12...");
+      return false;
+    }
+    static char s[32] = {0};
+    uint8_t crc = 0;
+    for (int i = 0; i < 4; ++i)
+       crc += buf[i];
+    if (crc != buf[4])
+    {
+        sprintf(s, "DHT12 data: %02d %02d %02d %02d %02d", buf[0], buf[1], buf[2], buf[3], buf[4]);
+        Serial.println(s);
+        Serial.println("CRC wrong!");
+        return false;
+    }
+    roomTemperaturePred = roomTemperature;
+    roomHumidityPred = roomHumidity;
+    
+    roomTemperature = buf[2] + (float)buf[3] / 10;
+    roomHumidity = buf[0] + (float)buf[1] / 10;
+    
+    CalcSred(roomTemperature, roomTemperaturePred, roomTemperatureR, roomTemperatureK);
+    CalcSred(roomHumidity, roomHumidityPred, roomHumidityR, roomHumidityK);
+    
+    return true;
 }
 

@@ -7,7 +7,7 @@
 const char* MqttServer = "192.168.0.3";
 const uint16_t MqttPort = 1883;
 
-const char* Device1 = "unit1_device1";
+const char* DeviceId7 = "unit1_device1";
 const char* ResetTopic = "unit1/device1/reset/action";
 constexpr const char *Sensor1 = "unit1/device1/sensor1/status";
 constexpr const char *Sensor2 = "unit1/device1/sensor2/status";
@@ -128,7 +128,7 @@ void MqttReconnect()
   {
     Serial.print("Attempting MQTT connection...");
     // Attempt to connect
-    if (mqtt.connect(Device1)) 
+    if (mqtt.connect(DeviceId))
     {
       Serial.println("connected");
       // Once connected, publish an announcement...
