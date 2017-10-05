@@ -1,10 +1,9 @@
 #include <Wire.h>
 
-static int humidityInt     = 0;
-static int humidityFrac    = 0;
-static int temperatureInt  = 0;
-static int temperatureFrac = 0;
-constexpr uint8_t i2cAddr = 0x5c << 1;
+constexpr uint8_t i2cAddr = 0x5c;
+
+static float temperature  = NAN;
+static float humidity     = NAN;
 
 void setup() 
 {
@@ -17,7 +16,15 @@ void setup()
 
 void loop() 
 {
-  ReadDHT12Sensor();
+  if (ReadDHT12Sensor())
+  {
+    Serial.print("T = ");
+    Serial.print(temperature);
+    Serial.println(" 'C");
+    Serial.print("H = ");
+    Serial.print(humidity);
+    Serial.println(" %");
+  }
   delay(3000);
 }
 
@@ -26,7 +33,7 @@ bool i2cRead(uint8_t reg, uint8_t* buffer)
   Wire.beginTransmission(i2cAddr);
   Wire.write(reg);
   Wire.endTransmission();
-  auto n = Wire.requestFrom(i2cAddr, 5);
+  auto n = Wire.requestFrom(i2cAddr, (uint8_t)5);
   if (n != 5)
     return false;
   for (int i = 0; i < 5; ++i)
@@ -37,7 +44,7 @@ bool i2cRead(uint8_t reg, uint8_t* buffer)
 bool ReadDHT12Sensor(void)
 {
     uint8_t buf[10] = {0};
-    if (i2cRead(0, &buf[0]))
+    if (!i2cRead(0, &buf[0]))
     {
       Serial.println("Error reading DHT12...");
       return false;
@@ -54,10 +61,8 @@ bool ReadDHT12Sensor(void)
         delay(3000);
         return false;
     }
-    humidityInt     = buf[0];
-    humidityFrac    = buf[1];
-    temperatureInt  = buf[2];
-    temperatureFrac = buf[3];
+    temperature  = buf[2] + (float)buf[3] / 10;
+    humidity     = buf[0] + (float)buf[1] / 10;
     return true;
 }
 

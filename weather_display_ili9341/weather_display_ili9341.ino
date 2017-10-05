@@ -18,11 +18,15 @@ constexpr const char* MqttServer PROGMEM= "192.168.0.3";
 constexpr const uint16_t MqttPort PROGMEM= 1883;
 constexpr const char *prefix PROGMEM= "unit1";
 constexpr const char *deviceId PROGMEM= "unit1_device2";
-constexpr const char *Sensor1 PROGMEM= "unit1/device1/sensor1/status";
-constexpr const char *Sensor2 PROGMEM= "unit1/device1/sensor2/status";
-constexpr const char *Sensor3 PROGMEM= "unit1/device1/sensor3/status";
-constexpr const char *Error PROGMEM= "unit1/device1/error/status";
-constexpr const char *Hello PROGMEM= "unit1/device1/hello/status";
+constexpr const char *Device1Sensor1 PROGMEM= "unit1/device1/sensor1/status";
+constexpr const char *Device1Sensor2 PROGMEM= "unit1/device1/sensor2/status";
+constexpr const char *Device1Sensor3 PROGMEM= "unit1/device1/sensor3/status";
+constexpr const char *Device1Error PROGMEM= "unit1/device1/error/status";
+constexpr const char *Device1Hello PROGMEM= "unit1/device1/hello/status";
+constexpr const char *Device3Sensor1 PROGMEM= "unit1/device3/sensor1/status";
+constexpr const char *Device3Sensor2 PROGMEM= "unit1/device3/sensor2/status";
+constexpr const char *Device3Error PROGMEM= "unit1/device3/error/status";
+constexpr const char *Device3Hello PROGMEM= "unit1/device3/hello/status";
 
 void ConnectToWiFi();
 void MqttConnect();
@@ -46,6 +50,17 @@ uint32_t temperatureK = 0;
 uint32_t humidityK = 0;
 uint32_t pressureK = 0;
 int errorCode = 0;
+
+float roomTemperature = NAN;
+float roomTemperaturePred = NAN;
+float roomTemperatureR = NAN;
+uint32_t roomTemperatureK = 0;
+float roomHumidity = NAN;
+float roomHumidityPred = NAN;
+float roomHumidityR = NAN;
+uint32_t roomHumidityK = 0;
+int roomErrorCode = 0;
+
 uint32_t updated = 0;
 uint32_t updatedOld = 0;
 uint32_t cycleTime = 0;
@@ -67,7 +82,7 @@ uint32_t historyTimeLastAdded = 0;
 
 uint32_t historyIndex = 0;
 
-void DrawSred(float value, float valueR, int x, int y);
+void DrawaArrow(float value, float valueR, int x, int y);
 
 void setup()
 {
@@ -118,22 +133,36 @@ void loop()
     if (temperature != NAN)
     {
       dtostrf(temperature, 3, 0, msg);
-      tft.print(msg, 24, 28);
-      DrawSred(temperature, temperatureR, 110, 33);
+      tft.print(msg, 24, 10);
+      DrawaArrow(temperature, temperatureR, 110, 15);
+    }
+
+    if (roomTemperature != NAN)
+    {
+      dtostrf(roomTemperature, 3, 0, msg);
+      tft.print(msg, 24, 38);
+      DrawaArrow(roomTemperature, roomTemperatureR, 110, 43);
     }
 
     if (humidity != NAN)
     {
       dtostrf(humidity, 3, 0, msg);
-      tft.print(msg, 152, 28);
-      DrawSred(humidity, humidityR, 226, 33);
+      tft.print(msg, 152, 10);
+      DrawaArrow(humidity, humidityR, 226, 15);
+    }
+  
+    if (roomHumidity != NAN)
+    {
+      dtostrf(roomHumidity, 3, 0, msg);
+      tft.print(msg, 152, 38);
+      DrawaArrow(roomHumidity, roomHumidityR, 226, 43);
     }
   
     if (pressure != NAN)
     {
       dtostrf(pressure, 4, 0, msg);
       tft.print(msg, 60, 64+26);
-      DrawSred(pressure, pressureR, 146, 67+26);
+      DrawaArrow(pressure, pressureR, 146, 67+26);
       DrawChart();
     }
   }
@@ -169,11 +198,16 @@ void MqttConnect()
   }
   Serial.println("Connected to MQTT server");
   mqttClient.subscribe(prefix); // for receiving HELLO messages from IoT Manager
-  mqttClient.subscribe(Sensor1);
-  mqttClient.subscribe(Sensor2);
-  mqttClient.subscribe(Sensor3);
-  mqttClient.subscribe(Error);
-  mqttClient.subscribe(Hello);
+  mqttClient.subscribe(Device1Sensor1);
+  mqttClient.subscribe(Device1Sensor2);
+  mqttClient.subscribe(Device1Sensor3);
+  mqttClient.subscribe(Device1Error);
+  mqttClient.subscribe(Device1Hello);
+
+  mqttClient.subscribe(Device3Sensor1);
+  mqttClient.subscribe(Device3Sensor2);
+  mqttClient.subscribe(Device3Error);
+  mqttClient.subscribe(Device3Hello);
 }
 
 bool StrEq(const char* s1, const char* s2)
@@ -209,33 +243,54 @@ void OnMessageArrived(char* topic, byte* payload, unsigned int length)
   buffer[length] = 0;
   memcpy(buffer, payload, length);
   String text(buffer);
-  if (StrEq(topic, Hello))
+  if (StrEq(topic, Device1Hello))
   {
-    Serial.print("HELLO from server received, reconnect counter: ");
+    Serial.print("HELLO from device 1 received, reconnect counter: ");
     Serial.println(text);
   }
-  else if (StrEq(topic, Sensor1))
+  if (StrEq(topic, Device3Hello))
+  {
+    Serial.print("HELLO from device 3 received, reconnect counter: ");
+    Serial.println(text);
+  }
+  else if (StrEq(topic, Device1Sensor1))
   {
     temperaturePred = temperature;
     temperature = text.toFloat();
     CalcSred(temperature, temperaturePred, temperatureR, temperatureK);
   }
-  else if (StrEq(topic, Sensor2))
+  else if (StrEq(topic, Device1Sensor2))
   {
     humidityPred = humidity;
     humidity = text.toFloat();
     CalcSred(humidity, humidityPred, humidityR, humidityK);
   }
-  else if (StrEq(topic, Sensor3))
+  else if (StrEq(topic, Device1Sensor3))
   {
     pressurePred = pressure;
     pressure = text.toFloat();
     CalcSred(pressure, pressurePred, pressureR, pressureK);
     AddToHistory();
   }
-  else if (StrEq(topic, Error))
+  else if (StrEq(topic, Device3Sensor1))
+  {
+    roomTemperaturePred = roomTemperature;
+    roomTemperature = text.toFloat();
+    CalcSred(roomTemperature, roomTemperaturePred, roomTemperatureR, roomTemperatureK);
+  }
+  else if (StrEq(topic, Device3Sensor2))
+  {
+    roomHumidityPred = roomHumidity;
+    roomHumidity = text.toFloat();
+    CalcSred(roomHumidity, roomHumidityPred, roomHumidityR, roomHumidityK);
+  }
+  else if (StrEq(topic, Device1Error))
   {
     errorCode = text.toInt();
+  }
+  else if (StrEq(topic, Device3Error))
+  {
+    roomErrorCode = text.toInt();
   }
 }
 
@@ -262,7 +317,7 @@ void DrawStable(int x, int y)
   tft.setColor(VGA_WHITE);
 }
 
-void DrawSred(float value, float valueR, int x, int y)
+void DrawaArrow(float value, float valueR, int x, int y)
 {
   if (valueR == NAN)
     return;
