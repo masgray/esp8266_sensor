@@ -192,7 +192,11 @@ void loop()
     }
   }
 
-  sprintf(msg, "%d ", (current - updatedOld)/1000);
+  uint32_t dt = (current - updatedOld)/1000;
+  if (dt < 100)
+    sprintf(msg, "%d ", dt);
+  else
+    sprintf(msg, "-");
   tft.setFont(Retro8x16);
   tft.print(msg, 198, 300);
 }
