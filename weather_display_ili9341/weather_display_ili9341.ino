@@ -82,6 +82,7 @@ uint32_t historyTimeLastAdded = 0;
 uint32_t historyIndex = 0;
 
 void DrawaArrow(float value, float valueR, int x, int y);
+void DrawNumber(float number, int x, int y, bool withPlus = false);
 
 void setup()
 {
@@ -135,37 +136,13 @@ void loop()
     tft.setFont(Arial_round_16x24);
     if (temperature != NAN)
     {
-      dtostrf(temperature, 3, 0, msg);
-      if (temperature >= 0.0)
-      {
-        char* p = msg;
-        while(*p == ' ' && *p != 0)
-          ++p;
-        sprintf(msg2, "+%s", p);
-        tft.print(msg2, 24, 14);
-      }
-      else
-      {
-        tft.print(msg, 24, 14);
-      }
+      DrawNumber(temperature, 24, 14, true);
       DrawaArrow(temperature, temperatureR, 100, 19);
     }
 
     if (roomTemperature != NAN)
     {
-      dtostrf(roomTemperature, 3, 0, msg);
-      if (roomTemperature >= 0.0)
-      {
-        char* p = msg;
-        while(*p == ' ' && *p != 0)
-          ++p;
-        sprintf(msg2, "+%s", p);
-        tft.print(msg2, 24, 42);
-      }
-      else
-      {
-        tft.print(msg, 24, 42);
-      }
+      DrawNumber(roomTemperature, 24, 42, true);
       DrawaArrow(roomTemperature, roomTemperatureR, 100, 47);
     }
 
@@ -186,8 +163,8 @@ void loop()
     if (pressure != NAN)
     {
       dtostrf(pressure, 4, 0, msg);
-      tft.print(msg, 60, 64+26);
-      DrawaArrow(pressure, pressureR, 146, 67+26);
+      tft.print(msg, 60, 90);
+      DrawaArrow(pressure, pressureR, 146, 93);
       DrawChart();
     }
   }
@@ -196,7 +173,7 @@ void loop()
   if (dt < 100)
     sprintf(msg, "%d ", dt);
   else
-    sprintf(msg, "-");
+    sprintf(msg, "- ");
   tft.setFont(Retro8x16);
   tft.print(msg, 198, 300);
 }
@@ -438,5 +415,20 @@ bool ReadDHT12Sensor(void)
     CalcSred(roomHumidity, roomHumidityPred, roomHumidityR, roomHumidityK);
     
     return true;
+}
+
+void DrawNumber(float number, int x, int y, bool withPlus)
+{
+  static char msg[32];
+  static char msg2[32];
+  dtostrf(number, 3, 0, msg);
+  char* p = msg;
+  while(*p == ' ' && *p != 0)
+    ++p;
+  if (withPlus && number >= 0.0)
+    sprintf(msg2, "+%s ", p);
+  else
+    sprintf(msg2, "%s ", p);
+  tft.print(msg2, x, y);
 }
 
