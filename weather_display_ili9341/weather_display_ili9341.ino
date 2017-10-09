@@ -1,8 +1,9 @@
+#include <dht12.h>
+
 #include "pass.h"
 
 #include <PubSubClient.h>
 #include <ESP8266WiFi.h>
-#include <Wire.h>
 
 #include <UTFT.h>
 
@@ -10,10 +11,11 @@ extern uint8_t Retro8x16[];
 extern uint8_t Arial_round_16x24[];
 
 constexpr int GPIO_RS = 5;
-constexpr uint8_t Dht12Address = 0x5c;
-constexpr int GPIO_I2C_CLK = 4;
-constexpr int GPIO_I2C_DATA = 2;
 
+constexpr int GPIO_I2C_DATA = 2;
+constexpr int GPIO_I2C_CLK = 4;
+
+Dht12 sensor(GPIO_I2C_DATA, GPIO_I2C_CLK);
 UTFT tft(ILI9341_S5P, NOTINUSE, NOTINUSE, GPIO_RS);
 
 extern unsigned short Background[];
@@ -93,7 +95,7 @@ void setup()
   {
     //Wait
   }
-  Wire.begin(GPIO_I2C_DATA, GPIO_I2C_CLK);
+  sensor.begin();
 
   tft.InitLCD(PORTRAIT);
   tft.clrScr();
@@ -373,44 +375,14 @@ void AddToHistory()
   }
 }
 
-bool ReadI2C(uint8_t deviceAdress, uint8_t registerAdress, uint8_t* buffer, size_t toRead)
-{
-  Wire.beginTransmission(deviceAdress);
-  Wire.write(registerAdress);
-  Wire.endTransmission();
-  auto n = Wire.requestFrom(deviceAdress, static_cast<uint8_t>(toRead));
-  if (n != toRead)
-    return false;
-  for (int i = 0; i < toRead; ++i)
-    buffer[i] = Wire.read();
-  return true;
-}
-
 bool ReadDHT12Sensor(void)
 {
-    static uint8_t buf[5] = {0};
-    if (!ReadI2C(Dht12Address, 0, &buf[0], 5))
-    {
-      Serial.println("Error reading DHT12...");
-      return false;
-    }
-    static char s[32] = {0};
-    uint8_t crc = 0;
-    for (int i = 0; i < 4; ++i)
-       crc += buf[i];
-    if (crc != buf[4])
-    {
-        sprintf(s, "DHT12 data: %02d %02d %02d %02d %02d", buf[0], buf[1], buf[2], buf[3], buf[4]);
-        Serial.println(s);
-        Serial.println("CRC wrong!");
-        return false;
-    }
     roomTemperaturePred = roomTemperature;
     roomHumidityPred = roomHumidity;
-    
-    roomTemperature = buf[2] + (float)buf[3] / 10;
-    roomHumidity = buf[0] + (float)buf[1] / 10;
-    
+
+    if (!sensor.read(roomTemperature, roomHumidity))
+      return false;
+
     CalcSred(roomTemperature, roomTemperaturePred, roomTemperatureR, roomTemperatureK);
     CalcSred(roomHumidity, roomHumidityPred, roomHumidityR, roomHumidityK);
     
