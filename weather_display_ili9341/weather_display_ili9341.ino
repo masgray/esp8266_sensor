@@ -4,6 +4,10 @@
 
 #include <PubSubClient.h>
 #include <ESP8266WiFi.h>
+#include <ArduinoOTA.h>
+#include <ESP8266mDNS.h>
+#include <ESP8266HTTPClient.h>
+#include <ArduinoJson.h>
 
 #include <UTFT.h>
 
@@ -30,9 +34,14 @@ constexpr const char *Device1Sensor3 PROGMEM= "unit1/device1/sensor3/status";
 constexpr const char *Device1Error PROGMEM= "unit1/device1/error/status";
 constexpr const char *Device1Hello PROGMEM= "unit1/device1/hello/status";
 
+constexpr const char *ApiOpenWeatherMapOrgHost PROGMEM= "api.openweathermap.org";
+constexpr const char *ApiOpenWeatherMapOrgForecast PROGMEM= "/data/2.5/forecast?q=Moscow,ru&units=metric&cnt=10&APPID=";
+constexpr const char *ApiOpenWeatherMapOrgCurrent PROGMEM= "/data/2.5/weather?q=Moscow,ru&units=metric&APPID=";
+
 void ConnectToWiFi();
 void MqttConnect();
 void OnMessageArrived(char* topic, byte* payload, unsigned int length);
+bool ReadWeather(bool isForecast);
 
 WiFiClient wifiClient;
 PubSubClient mqttClient(MqttServer, MqttPort, OnMessageArrived, wifiClient);
@@ -61,14 +70,25 @@ float roomHumidity = NAN;
 float roomHumidityPred = NAN;
 float roomHumidityR = NAN;
 uint32_t roomHumidityK = 0;
+float forecast12h_T = NAN;
+float forecast24h_T = NAN;
+float forecast12h_Clouds = NAN;
+float forecast24h_Clouds = NAN;
+float forecast12h_Rain = NAN;
+float forecast24h_Rain = NAN;
+float forecast12h_WindSpeed = NAN;
+float forecast24h_WindSpeed = NAN;
+float forecast12h_WindDirection = NAN;
+float forecast24h_WindDirection = NAN;
 
 uint32_t updated = 0;
 uint32_t updatedOld = 0;
 uint32_t cycleTime = 0;
+uint32_t timeForReadForecast = 0;
 
 constexpr double left = 6;
 constexpr double right = 236;
-constexpr double top = 125;
+constexpr double top = 199;
 constexpr double bottom = 284;
 
 int xPos = left;
@@ -83,18 +103,20 @@ uint32_t historyTimeLastAdded = 0;
 
 uint32_t historyIndex = 0;
 
+struct Vector
+{
+  float x;
+  float y;
+};
+
 void DrawaArrow(float value, float valueR, int x, int y);
 void DrawNumber(float number, int x, int y, bool withPlus = false);
+void DrawWind(float windDir, int x, int y);
 
 void setup()
 {
   pinMode(GPIO_RS, OUTPUT);
   
-  Serial.begin(115200);
-  while (!Serial)
-  {
-    //Wait
-  }
   sensor.begin();
 
   tft.InitLCD(PORTRAIT);
@@ -117,6 +139,8 @@ void loop()
   static char msg[32];
   static char msg2[64];
 
+  ArduinoOTA.handle();
+  
   if (!mqttClient.connected()) 
   {
     MqttConnect();
@@ -126,6 +150,13 @@ void loop()
   auto current = millis();
   if (current - cycleTime < 1000)
     return;
+
+  if (current - timeForReadForecast > 15*60*1000 || timeForReadForecast == 0)
+  {
+    timeForReadForecast = current;
+    if (ReadForecastWeather())
+      PrintForecastWeather();
+  }
 
   cycleTime = current;
 
@@ -139,34 +170,33 @@ void loop()
     if (temperature != NAN)
     {
       DrawNumber(temperature, 24, 14, true);
-      DrawaArrow(temperature, temperatureR, 100, 19);
+      DrawArrow(temperature, temperatureR, 100, 19);
     }
 
     if (roomTemperature != NAN)
     {
       DrawNumber(roomTemperature, 24, 42, true);
-      DrawaArrow(roomTemperature, roomTemperatureR, 100, 47);
+      DrawArrow(roomTemperature, roomTemperatureR, 100, 47);
     }
 
     if (humidity != NAN)
     {
       dtostrf(humidity, 3, 0, msg);
       tft.print(msg, 152, 14);
-      DrawaArrow(humidity, humidityR, 216, 19);
+      DrawArrow(humidity, humidityR, 216, 19);
     }
   
     if (roomHumidity != NAN)
     {
       dtostrf(roomHumidity, 3, 0, msg);
       tft.print(msg, 152, 42);
-      DrawaArrow(roomHumidity, roomHumidityR, 216, 47);
+      DrawArrow(roomHumidity, roomHumidityR, 216, 47);
     }
   
     if (pressure != NAN)
     {
-      dtostrf(pressure, 4, 0, msg);
-      tft.print(msg, 60, 90);
-      DrawaArrow(pressure, pressureR, 146, 93);
+      DrawNumber(pressure, 46, 80, false);
+      DrawArrow(pressure, pressureR, 104, 93);
       DrawChart();
     }
   }
@@ -175,59 +205,73 @@ void loop()
   if (dt < 100)
     sprintf(msg, "%d ", dt);
   else
-    sprintf(msg, "- ");
+    sprintf(msg, "-  ");
   tft.setFont(Retro8x16);
-  tft.print(msg, 198, 300);
+  tft.print(msg, 114, 300);
+
+  dt = (current - timeForReadForecast)/1000/60;
+  if (dt < 100)
+    sprintf(msg, "%d ", dt);
+  else
+    sprintf(msg, "-  ");
+  tft.print(msg, 177, 300);
 }
 
 void ConnectToWiFi()
 {
-  Serial.print("Connecting to ");
-  Serial.print(ssid);
-  Serial.println("...");
+  WiFi.disconnect(true);
 
   WiFi.begin(ssid, password);
   if (WiFi.waitForConnectResult() != WL_CONNECTED)
   {
-    Serial.println("WiFi FAULT!");
     return;
   }
-  Serial.println("WiFi connected.");
-  Serial.println(WiFi.localIP());
+
+  WiFi.hostname("EspWeatherStationDisplay");
+  ArduinoOTA.setHostname("EspWeatherStationDisplay");
+  
+  ArduinoOTA.onStart([](){
+    //
+  });
+  ArduinoOTA.onEnd([](){
+    //
+  });
+  
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total){
+    //
+  });
+  
+  ArduinoOTA.onError([](ota_error_t error){
+//    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+//    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+//    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+//    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+//    else if (error == OTA_END_ERROR) Serial.println("End Failed");
+  });
+  ArduinoOTA.begin();
 }
 
 void MqttConnect()
 {
-  Serial.println("Connecting to MQTT server...");
   if (!mqttClient.connect(deviceId))//, mqtt_user, mqtt_passw
   {
-    Serial.println("Could not connect to MQTT server");
     return;
   }
-  Serial.println("Connected to MQTT server");
 
   if (!mqttClient.subscribe(Device1Sensor1))
   {
-    Serial.print("Could not subscribe to topic: ");
-    Serial.println(Device1Sensor1);
     return;
   }
   if (!mqttClient.subscribe(Device1Sensor2))
   {
-    Serial.print("Could not subscribe to topic: ");
-    Serial.println(Device1Sensor1);
     return;
   }
   if (!mqttClient.subscribe(Device1Sensor3))
   {
-    Serial.print("Could not subscribe to topic: ");
-    Serial.println(Device1Sensor1);
     return;
   }
   if (!mqttClient.subscribe(Device1Error))
   {
-    Serial.print("Could not subscribe to topic: ");
-    Serial.println(Device1Sensor1);
     return;
   }
 }
@@ -314,7 +358,7 @@ void DrawStable(int x, int y)
   tft.setColor(VGA_WHITE);
 }
 
-void DrawaArrow(float value, float valueR, int x, int y)
+void DrawArrow(float value, float valueR, int x, int y)
 {
   if (valueR == NAN)
     return;
@@ -355,8 +399,6 @@ void DrawChart()
 void AddToHistory()
 {
   auto current = millis();
-  Serial.print("Free heap: ");
-  Serial.println(ESP.getFreeHeap());
 
   if (current - historyTimeLastAdded > historyTimeStep || historyTimeLastAdded == 0)
   {
@@ -403,4 +445,144 @@ void DrawNumber(float number, int x, int y, bool withPlus)
     sprintf(msg2, "%s ", p);
   tft.print(msg2, x, y);
 }
+
+void GetJsonParams(const JsonObject& root, int lineNumber, float& t, float& clouds, float& rain, float& windSpeed, float& windDirection)
+{
+  auto& line = root["list"][lineNumber];
+  t = line["main"]["temp"];
+  clouds = line["clouds"]["all"];
+  rain = line["rain"]["3h"];
+  windSpeed = line["wind"]["speed"];
+  windDirection = line["wind"]["deg"];
+}
+
+void PrintForecastWeather(void)
+{
+  static char msg[32];
+  tft.setFont(Retro8x16);
+  if (forecast12h_T != NAN)
+  {
+    DrawNumber(forecast12h_T, 44, 142, true);
+  }
+  if (forecast24h_T != NAN)
+  {
+    DrawNumber(forecast24h_T, 44, 168, true);
+  }
+  if (forecast12h_Clouds != NAN)
+  {
+    DrawNumber(forecast12h_Clouds, 94, 142, false);
+  }
+  if (forecast24h_Clouds != NAN)
+  {
+    DrawNumber(forecast24h_Clouds, 94, 168, false);
+  }
+  if (forecast12h_Rain != NAN)
+  {
+    dtostrf(forecast12h_Rain, 3, 2, msg);
+    tft.print(msg, 134, 142);
+  }
+  if (forecast24h_Rain != NAN)
+  {
+    dtostrf(forecast24h_Rain, 3, 2, msg);
+    tft.print(msg, 134, 168);
+  }
+  if (forecast12h_WindSpeed != NAN)
+  {
+    DrawNumber(forecast12h_WindSpeed, 188, 142, false);
+  }
+  if (forecast24h_WindSpeed != NAN)
+  {
+    DrawNumber(forecast24h_WindSpeed, 188, 168, false);
+  }
+  if (forecast12h_WindDirection != NAN)
+  {
+    DrawWind(forecast12h_WindDirection, 224, 151);
+  }
+  if (forecast24h_WindDirection != NAN)
+  {
+    DrawWind(forecast24h_WindDirection, 224, 177);
+  }
+}
+
+void ClearWindArrow(int x, int y)
+{
+  tft.setColor(38, 84, 120);
+  tft.fillRect(x - 8, y - 8, x + 8, y + 8);
+  tft.setColor(VGA_WHITE);
+}
+
+void DrawWindArrow(int x, int y, Vector point1, Vector point2, Vector point3, Vector point4)
+{
+  ClearWindArrow(x, y);
+  tft.drawLine(x + point1.x, y + point1.y, x + point2.x, y + point2.y);
+  tft.drawLine(x + point1.x, y + point1.y, x + point3.x, y + point3.y);
+  tft.drawLine(x + point1.x, y + point1.y, x + point4.x, y + point4.y);
+}
+
+void Rotate(Vector& point, float angle)
+{
+  Vector rotatedPoint;
+  float rad = angle * 2 * PI / 360;
+  rotatedPoint.x = point.x * cos(rad) + point.y * sin(rad);
+  rotatedPoint.y = point.x * sin(rad) - point.y * cos(rad);
+  point = rotatedPoint;
+}
+
+void DrawWind(float windDir, int x, int y)
+{
+  Vector point1{0, -8};
+  Rotate(point1, windDir);
+  Vector point2{0, 8};
+  Rotate(point2, windDir);
+  Vector point3{-2, -2};
+  Rotate(point3, windDir);
+  Vector point4{2, -2};
+  Rotate(point4, windDir);
+  DrawWindArrow(x, y, point1, point2, point3, point4);
+}
+
+bool ReadWeather(bool isForecast)
+{
+  bool ok = false;
+  HTTPClient http;
+
+  if (isForecast)
+    http.begin(ApiOpenWeatherMapOrgHost, 80, String(ApiOpenWeatherMapOrgCurrent) + String(ApiAppID));
+  else
+    http.begin(ApiOpenWeatherMapOrgHost, 80, String(ApiOpenWeatherMapOrgForecast) + String(ApiAppID));
+  
+  int httpCode = http.GET();
+  
+  if(httpCode > 0) 
+  {
+      if (httpCode == HTTP_CODE_OK) 
+      {
+        DynamicJsonBuffer jsonBuffer(4096);
+        auto response = http.getString();
+        JsonObject& root = jsonBuffer.parseObject(response);
+        if (root.success())
+        {
+          if (isForecast)
+          {
+            int cnt = root["cnt"];
+            if (cnt == 10)
+            {
+              GetJsonParams(root, 4, forecast12h_T, forecast12h_Clouds, forecast12h_Rain, forecast12h_WindSpeed, forecast12h_WindDirection);
+              GetJsonParams(root, 9, forecast24h_T, forecast24h_Clouds, forecast24h_Rain, forecast24h_WindSpeed, forecast24h_WindDirection);
+              ok = true;
+            }
+          }
+          else
+          {
+              GetJsonParams(root, 9, forecast24h_T, forecast24h_Clouds, forecast24h_Rain, forecast24h_WindSpeed, forecast24h_WindDirection);
+              ok = true;
+          }
+        }
+      }
+  } 
+  
+  http.end();
+  return ok;
+}
+
 
