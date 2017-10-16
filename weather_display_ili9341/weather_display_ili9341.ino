@@ -38,10 +38,7 @@ constexpr const char *ApiOpenWeatherMapOrgHost PROGMEM= "api.openweathermap.org"
 constexpr const char *ApiOpenWeatherMapOrgForecast PROGMEM= "/data/2.5/forecast?q=Moscow,ru&units=metric&cnt=10&APPID=";
 constexpr const char *ApiOpenWeatherMapOrgCurrent PROGMEM= "/data/2.5/weather?q=Moscow,ru&units=metric&APPID=";
 
-void ConnectToWiFi();
-void MqttConnect();
 void OnMessageArrived(char* topic, byte* payload, unsigned int length);
-bool ReadWeather(bool isForecast);
 
 WiFiClient wifiClient;
 PubSubClient mqttClient(MqttServer, MqttPort, OnMessageArrived, wifiClient);
@@ -80,11 +77,15 @@ float forecast12h_WindSpeed = NAN;
 float forecast24h_WindSpeed = NAN;
 float forecast12h_WindDirection = NAN;
 float forecast24h_WindDirection = NAN;
+float current_Rain = NAN;
+float current_WindSpeed = NAN;
+float current_WindDirection = NAN;
 
 uint32_t updated = 0;
 uint32_t updatedOld = 0;
 uint32_t cycleTime = 0;
 uint32_t timeForReadForecast = 0;
+uint32_t timeForReadCurrentWeather = 0;
 
 constexpr double left = 6;
 constexpr double right = 236;
@@ -109,9 +110,19 @@ struct Vector
   float y;
 };
 
+enum WeatherType
+{
+  Forecast,
+  Current
+};
+
+void ConnectToWiFi();
+void MqttConnect();
 void DrawaArrow(float value, float valueR, int x, int y);
-void DrawNumber(float number, int x, int y, bool withPlus = false);
+void DrawNumber(float number, int x, int y, bool withPlus = false, int charsWidth = 3, int precision = 0);
 void DrawWind(float windDir, int x, int y);
+bool ReadWeather(WeatherType weatherType);
+void PrintCurrentWeather();
 
 void setup()
 {
@@ -154,8 +165,15 @@ void loop()
   if (current - timeForReadForecast > 15*60*1000 || timeForReadForecast == 0)
   {
     timeForReadForecast = current;
-    if (ReadForecastWeather())
+    if (ReadWeather(WeatherType::Forecast))
       PrintForecastWeather();
+  }
+
+  if (current - timeForReadCurrentWeather > 60*1000 || timeForReadCurrentWeather == 0)
+  {
+    timeForReadCurrentWeather = current;
+    if (ReadWeather(WeatherType::Current))
+      PrintCurrentWeather();
   }
 
   cycleTime = current;
@@ -431,11 +449,11 @@ bool ReadDHT12Sensor(void)
     return true;
 }
 
-void DrawNumber(float number, int x, int y, bool withPlus)
+void DrawNumber(float number, int x, int y, bool withPlus, int charsWidth, int precision)
 {
   static char msg[32];
   static char msg2[32];
-  dtostrf(number, 3, 0, msg);
+  dtostrf(number, charsWidth, precision, msg);
   char* p = msg;
   while(*p == ' ' && *p != 0)
     ++p;
@@ -446,7 +464,7 @@ void DrawNumber(float number, int x, int y, bool withPlus)
   tft.print(msg2, x, y);
 }
 
-void GetJsonParams(const JsonObject& root, int lineNumber, float& t, float& clouds, float& rain, float& windSpeed, float& windDirection)
+void GetForecastJsonParams(const JsonObject& root, int lineNumber, float& t, float& clouds, float& rain, float& windSpeed, float& windDirection)
 {
   auto& line = root["list"][lineNumber];
   t = line["main"]["temp"];
@@ -454,6 +472,13 @@ void GetJsonParams(const JsonObject& root, int lineNumber, float& t, float& clou
   rain = line["rain"]["3h"];
   windSpeed = line["wind"]["speed"];
   windDirection = line["wind"]["deg"];
+}
+
+void GetCurrentWeatherJsonParams(const JsonObject& root, float& rain, float& windSpeed, float& windDirection)
+{
+  rain = root["rain"]["3h"];
+  windSpeed = root["wind"]["speed"];
+  windDirection = root["wind"]["deg"];
 }
 
 void PrintForecastWeather(void)
@@ -504,6 +529,23 @@ void PrintForecastWeather(void)
   }
 }
 
+void PrintCurrentWeather()
+{
+  tft.setFont(Retro8x16);
+  if (current_Rain != NAN)
+  {
+    DrawNumber(current_Rain, 116, 90, false, 3, 2);
+  }
+  if (current_WindSpeed != NAN)
+  {
+    DrawNumber(current_WindSpeed, 188, 90, false);
+  }
+  if (current_WindDirection != NAN)
+  {
+    DrawWind(current_WindDirection, 224, 99);
+  }
+}
+
 void ClearWindArrow(int x, int y)
 {
   tft.setColor(38, 84, 120);
@@ -541,44 +583,44 @@ void DrawWind(float windDir, int x, int y)
   DrawWindArrow(x, y, point1, point2, point3, point4);
 }
 
-bool ReadWeather(bool isForecast)
+bool ReadWeather(WeatherType weatherType)
 {
   bool ok = false;
   HTTPClient http;
 
-  if (isForecast)
-    http.begin(ApiOpenWeatherMapOrgHost, 80, String(ApiOpenWeatherMapOrgCurrent) + String(ApiAppID));
-  else
+  if (weatherType == WeatherType::Forecast)
     http.begin(ApiOpenWeatherMapOrgHost, 80, String(ApiOpenWeatherMapOrgForecast) + String(ApiAppID));
+  else
+    http.begin(ApiOpenWeatherMapOrgHost, 80, String(ApiOpenWeatherMapOrgCurrent) + String(ApiAppID));
   
   int httpCode = http.GET();
   
   if(httpCode > 0) 
   {
-      if (httpCode == HTTP_CODE_OK) 
+    if (httpCode == HTTP_CODE_OK) 
+    {
+      DynamicJsonBuffer jsonBuffer(4096);
+      auto response = http.getString();
+      JsonObject& root = jsonBuffer.parseObject(response);
+      if (root.success())
       {
-        DynamicJsonBuffer jsonBuffer(4096);
-        auto response = http.getString();
-        JsonObject& root = jsonBuffer.parseObject(response);
-        if (root.success())
+        if (weatherType == WeatherType::Forecast)
         {
-          if (isForecast)
+          int cnt = root["cnt"];
+          if (cnt == 10)
           {
-            int cnt = root["cnt"];
-            if (cnt == 10)
-            {
-              GetJsonParams(root, 4, forecast12h_T, forecast12h_Clouds, forecast12h_Rain, forecast12h_WindSpeed, forecast12h_WindDirection);
-              GetJsonParams(root, 9, forecast24h_T, forecast24h_Clouds, forecast24h_Rain, forecast24h_WindSpeed, forecast24h_WindDirection);
-              ok = true;
-            }
-          }
-          else
-          {
-              GetJsonParams(root, 9, forecast24h_T, forecast24h_Clouds, forecast24h_Rain, forecast24h_WindSpeed, forecast24h_WindDirection);
-              ok = true;
+            GetForecastJsonParams(root, 4, forecast12h_T, forecast12h_Clouds, forecast12h_Rain, forecast12h_WindSpeed, forecast12h_WindDirection);
+            GetForecastJsonParams(root, 9, forecast24h_T, forecast24h_Clouds, forecast24h_Rain, forecast24h_WindSpeed, forecast24h_WindDirection);
+            ok = true;
           }
         }
+        else
+        {
+           GetCurrentWeatherJsonParams(root, current_Rain, current_WindSpeed, current_WindDirection);
+           ok = true;
+        }
       }
+    }
   } 
   
   http.end();
