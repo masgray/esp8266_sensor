@@ -1,5 +1,6 @@
-#include "pass.h"
 #include "timer.h"
+#include "sensor_value.h"
+#include "application.h"
 
 #include <dht12.h>
 
@@ -11,6 +12,12 @@
 #include <ESP8266HTTPClient.h>
 #include <ArduinoJson.h>
 
+#include <DNSServer.h>
+#include <WiFiManager.h>
+#include <FS.h>
+
+Application app;
+
 extern uint8_t Retro8x16[];
 extern uint8_t Arial_round_16x24[];
 
@@ -19,13 +26,27 @@ constexpr int GPIO_RS = 5;
 constexpr int GPIO_I2C_DATA = 2;
 constexpr int GPIO_I2C_CLK = 4;
 
-Dht12 sensor(GPIO_I2C_DATA, GPIO_I2C_CLK);
+Dht12 roomTHSensor(GPIO_I2C_DATA, GPIO_I2C_CLK);
 UTFT tft(ILI9341_S5P, NOTINUSE, NOTINUSE, GPIO_RS);
 
 extern unsigned short Background[];
 
-constexpr const char* MqttServer PROGMEM= "192.168.0.3";
-constexpr const uint16_t MqttPort PROGMEM= 1883;
+constexpr const char *DefaultApPassword PROGMEM= "DefaultPassword0001";
+
+constexpr const size_t MqttServerSize PROGMEM= 32;
+static char MqttServer[MqttServerSize] = "192.168.0.3";
+
+constexpr const size_t MqttPortStrSize PROGMEM= 6;
+static char MqttPortStr[MqttPortStrSize] = "1883";
+
+constexpr const size_t ApiAppIDSize PROGMEM= 33;
+static char ApiAppID[ApiAppIDSize] = "";
+
+constexpr const size_t ApiLocationSize PROGMEM= 33;
+static char ApiLocation[ApiLocationSize] = "Moscow,ru";
+
+constexpr const uint16_t MqttDefaultPort PROGMEM= 1883;
+
 constexpr const char *prefix PROGMEM= "unit1";
 constexpr const char *deviceId PROGMEM= "unit1_device2";
 constexpr const char *Device1Sensor1 PROGMEM= "unit1/device1/sensor1/status";
@@ -35,40 +56,34 @@ constexpr const char *Device1Error PROGMEM= "unit1/device1/error/status";
 constexpr const char *Device1Hello PROGMEM= "unit1/device1/hello/status";
 
 constexpr const char *ApiOpenWeatherMapOrgHost PROGMEM= "api.openweathermap.org";
-constexpr const char *ApiOpenWeatherMapOrgForecast PROGMEM= "/data/2.5/forecast?q=Moscow,ru&units=metric&cnt=10&APPID=";
-constexpr const char *ApiOpenWeatherMapOrgCurrent PROGMEM= "/data/2.5/weather?q=Moscow,ru&units=metric&APPID=";
+constexpr const char *ApiOpenWeatherMapOrgForecast1 PROGMEM= "/data/2.5/forecast?q=";
+constexpr const char *ApiOpenWeatherMapOrgForecast2 PROGMEM= "&units=metric&cnt=10&APPID=";
+constexpr const char *ApiOpenWeatherMapOrgCurrent1 PROGMEM= "/data/2.5/weather?q=";
+constexpr const char *ApiOpenWeatherMapOrgCurrent2 PROGMEM= "&units=metric&APPID=";
 
 constexpr const char* HostName PROGMEM= "EspWeatherStationDisplay";
 
 void OnMessageArrived(char* topic, byte* payload, unsigned int length);
 
+WiFiManager wifiManager;
+WiFiManagerParameter parameterMqttServer("server", "MQTT server", MqttServer, MqttServerSize);
+WiFiManagerParameter parameterMqttPort("port", "MQTT port", MqttPortStr, MqttPortStrSize);
+WiFiManagerParameter parameterApiAppID("ApiAppId", "APPID for api.openweathermap.org", ApiAppID, ApiAppIDSize);
+WiFiManagerParameter parameterApiLocation("ApiLocation", "Location for api.openweathermap.org in form of \"City,country code\" (Moscow,ru)", ApiLocation, ApiLocationSize);
+
 WiFiClient wifiClient;
-PubSubClient mqttClient(MqttServer, MqttPort, OnMessageArrived, wifiClient);
+PubSubClient mqttClient(MqttServer, MqttDefaultPort, OnMessageArrived, wifiClient);
 
-float temperature = NAN;
-float humidity = NAN;
-float pressure = NAN;
-float pressureMin = 730.0;
-float pressureMax = 750.0;
-float temperaturePred = NAN;
-float humidityPred = NAN;
-float pressurePred = NAN;
-float temperatureR = NAN;
-float humidityR = NAN;
-float pressureR = NAN;
-uint32_t temperatureK = 0;
-uint32_t humidityK = 0;
-uint32_t pressureK = 0;
-int errorCode = 0;
+SensorValue outerTemperature;
+SensorValue outerHumidity;
+SensorValue outerPressure;
+float outerPressureMin = 730.0;
+float outerPressureMax = 750.0;
+int outerSensorErrorCode = 0;
 
-float roomTemperature = NAN;
-float roomTemperaturePred = NAN;
-float roomTemperatureR = NAN;
-uint32_t roomTemperatureK = 0;
-float roomHumidity = NAN;
-float roomHumidityPred = NAN;
-float roomHumidityR = NAN;
-uint32_t roomHumidityK = 0;
+SensorValue roomTemperature;
+SensorValue roomHumidity;
+
 float forecast12h_T = NAN;
 float forecast24h_T = NAN;
 float forecast12h_Clouds = NAN;
@@ -106,6 +121,7 @@ uint32_t historyTimeLastAdded = 0;
 uint32_t historyIndex = 0;
 
 bool runCycle = true;
+bool shouldSaveConfig = false;
 
 Timer timerMainCycle(1000, TimerState::Started);
 Timer timerForReadForecast(15*60*1000, TimerState::Started);
@@ -133,9 +149,11 @@ void PrintCurrentWeather();
 
 void setup()
 {
+  app.begin();
+  
   pinMode(GPIO_RS, OUTPUT);
   
-  sensor.begin();
+  roomTHSensor.begin();
 
   tft.InitLCD(PORTRAIT);
   tft.clrScr();
@@ -147,6 +165,9 @@ void setup()
 
   tft.drawBitmap(0, 0, displayWidth, displayHeight, Background);
 
+  if (!ReadConfiguration())
+    PrintError("Error reading config!");
+    
   ConnectToWiFi();
   updatedOld = updated = millis();
   MqttConnect();
@@ -158,6 +179,9 @@ void setup()
 
 void loop()
 {
+  app.loop();
+  yield();
+
   static char msg[32];
   static char msg2[64];
 
@@ -203,43 +227,41 @@ void loop()
   }
 
   if (runCycle)
-    ReadDHT12Sensor();
+    ReadRoomTHSensor();
 
   if (runCycle && updated != updatedOld)
   {
     updatedOld = updated;
 
     tft.setFont(Arial_round_16x24);
-    if (temperature != NAN)
+    if (outerTemperature.isGood)
     {
-      DrawNumber(temperature, 24, 14, true);
-      DrawArrow(temperature, temperatureR, 100, 19);
+      DrawNumber(outerTemperature.value, 24, 14, true);
+      DrawArrow(outerTemperature.value, outerTemperature.r, 100, 19);
     }
 
-    if (roomTemperature != NAN)
+    if (roomTemperature.isGood)
     {
-      DrawNumber(roomTemperature, 24, 42, true);
-      DrawArrow(roomTemperature, roomTemperatureR, 100, 47);
+      DrawNumber(roomTemperature.value, 24, 42, true);
+      DrawArrow(roomTemperature.value, roomTemperature.r, 100, 47);
     }
 
-    if (humidity != NAN)
+    if (outerHumidity.isGood)
     {
-      dtostrf(humidity, 3, 0, msg);
-      tft.print(msg, 152, 14);
-      DrawArrow(humidity, humidityR, 216, 19);
+      DrawNumber(outerHumidity.value, 152, 14, false);
+      DrawArrow(outerHumidity.value, outerHumidity.r, 216, 19);
     }
   
-    if (roomHumidity != NAN)
+    if (roomHumidity.isGood)
     {
-      dtostrf(roomHumidity, 3, 0, msg);
-      tft.print(msg, 152, 42);
-      DrawArrow(roomHumidity, roomHumidityR, 216, 47);
+      DrawNumber(roomHumidity.value, 152, 42, false);
+      DrawArrow(roomHumidity.value, roomHumidity.r, 216, 47);
     }
   
-    if (pressure != NAN)
+    if (outerPressure.isGood)
     {
-      DrawNumber(pressure, 46, 80, false);
-      DrawArrow(pressure, pressureR, 104, 93);
+      DrawNumber(outerPressure.value, 46, 80, false);
+      DrawArrow(outerPressure.value, outerPressure.r, 104, 93);
       DrawChart();
     }
   }
@@ -263,11 +285,96 @@ void loop()
   }
 }
 
+bool ReadConfiguration()
+{
+  if (!SPIFFS.begin()) 
+    return false;
+  
+  if (!SPIFFS.exists("/config.json"))
+    return false;
+
+  File configFile = SPIFFS.open("/config.json", "r");
+  if (!configFile) 
+    return false;
+
+  size_t size = configFile.size();
+  // Allocate a buffer to store contents of the file.
+  std::unique_ptr<char[]> buf(new char[size]);
+
+  configFile.readBytes(buf.get(), size);
+  DynamicJsonBuffer jsonBuffer;
+  JsonObject& json = jsonBuffer.parseObject(buf.get());
+
+  if (!json.success()) 
+    return false;
+    
+  strcpy(MqttServer, json["MqttServer"]);
+  strcpy(MqttPortStr, json["MqttPort"]);
+  strcpy(ApiAppID, json["ApiAppID"]);
+  strcpy(ApiLocation, json["ApiLocation"]);
+  return true;
+}
+
+void SaveConfiguration()
+{
+  DynamicJsonBuffer jsonBuffer;
+  JsonObject& json = jsonBuffer.createObject();
+  json["MqttServer"] = MqttServer;
+  json["MqttPort"] = MqttPortStr;
+  json["ApiAppID"] = ApiAppID;
+  json["ApiLocation"] = ApiLocation;
+
+  File configFile = SPIFFS.open("/config.json", "w");
+  if (!configFile)
+    return;
+
+  json.printTo(configFile);
+  configFile.close();
+}
+
+void configModeCallback(WiFiManager *myWiFiManager)
+{
+  static char msg[64];
+  auto ip = WiFi.softAPIP().toString();
+  sprintf(msg, "Connect to Wi-Fi network \"%s\"\nOpen page at http://%s\nto configure station.", HostName, ip.c_str());
+  PrintError(msg);
+}
+
+void saveConfigCallback() 
+{
+  shouldSaveConfig = true;
+}
+
 void ConnectToWiFi()
 {
   WiFi.disconnect(true);
 
-  WiFi.begin(ssid, password);
+  wifiManager.setAPCallback(configModeCallback);
+  wifiManager.setSaveConfigCallback(saveConfigCallback);
+  wifiManager.setMinimumSignalQuality(20);
+  wifiManager.addParameter(&parameterMqttServer);
+  wifiManager.addParameter(&parameterMqttPort);
+  wifiManager.addParameter(&parameterApiAppID);
+  wifiManager.addParameter(&parameterApiLocation);
+
+  if (!wifiManager.autoConnect(HostName, DefaultApPassword))
+  {
+    PrintError("Web configuring error!");
+    ESP.reset();
+    delay(5000);
+  }
+
+  strcpy(MqttServer, parameterMqttServer.getValue());
+  strcpy(MqttPortStr, parameterMqttPort.getValue());
+  strcpy(ApiAppID, parameterApiAppID.getValue());
+  strcpy(ApiLocation, parameterApiLocation.getValue());
+
+  if (shouldSaveConfig)
+  {
+    SaveConfiguration();
+  }
+
+//  WiFi.begin(ssid, password);
   if (WiFi.waitForConnectResult() != WL_CONNECTED)
   {
     return;
@@ -314,20 +421,20 @@ bool StrEq(const char* s1, const char* s2)
   return strcmp(s1, s2) == 0;
 }
 
-void CalcSred(float value, float valuePred, float& valueR, uint32_t& k)
+void CalcAvarage(SensorValue& sensorValue)
 {
-  if (valuePred == NAN)
+  if (!sensorValue.isGood)
     return;
-  if (k == 1)
+  if (sensorValue.k == 1)
   {
-    valueR = (value + valuePred)/2;
+    sensorValue.r = (sensorValue.value + sensorValue.pred)/2;
   }
-  else if (k > 2)
+  else if (sensorValue.k > 2)
   {
-    float n = (k*valueR + value)/((k + 1)*valueR);
-    valueR *= n;
+    float n = (sensorValue.k * sensorValue.r + sensorValue.value) / ((sensorValue.k + 1) * sensorValue.r);
+    sensorValue.r *= n;
   }
-  ++k;
+  ++sensorValue.k;
 }
 
 void OnMessageArrived(char* topic, byte* payload, unsigned int length)
@@ -343,26 +450,32 @@ void OnMessageArrived(char* topic, byte* payload, unsigned int length)
 
   if (StrEq(topic, Device1Sensor1))
   {
-    temperaturePred = temperature;
-    temperature = text.toFloat();
-    CalcSred(temperature, temperaturePred, temperatureR, temperatureK);
+    if (outerTemperature.isGood)
+      outerTemperature.pred = outerTemperature.value;
+    outerTemperature.value = text.toFloat();
+    outerTemperature.isGood = outerTemperature.value != NAN;
+    CalcAvarage(outerTemperature);
   }
   else if (StrEq(topic, Device1Sensor2))
   {
-    humidityPred = humidity;
-    humidity = text.toFloat();
-    CalcSred(humidity, humidityPred, humidityR, humidityK);
+    if (outerHumidity.isGood)
+      outerHumidity.pred = outerHumidity.value;
+    outerHumidity.value = text.toFloat();
+    outerHumidity.isGood = outerHumidity.value != NAN;
+    CalcAvarage(outerHumidity);
   }
   else if (StrEq(topic, Device1Sensor3))
   {
-    pressurePred = pressure;
-    pressure = text.toFloat();
-    CalcSred(pressure, pressurePred, pressureR, pressureK);
+    if (outerPressure.isGood)
+      outerPressure.pred = outerPressure.value;
+    outerPressure.value = text.toFloat();
+    outerPressure.isGood = outerPressure.value != NAN;
+    CalcAvarage(outerPressure);
     AddToHistory();
   }
   else if (StrEq(topic, Device1Error))
   {
-    errorCode = text.toInt();
+    outerSensorErrorCode = text.toInt();
   }
 }
 
@@ -403,7 +516,7 @@ void DrawArrow(float value, float valueR, int x, int y)
 
 int CalcY(float p)
 {
-  double yPos = bottom - (bottom - top) / (pressureMax - pressureMin) * (p - pressureMin);
+  double yPos = bottom - (bottom - top) / (outerPressureMax - outerPressureMin) * (p - outerPressureMin);
   return yPos;
 }
 
@@ -439,25 +552,27 @@ void AddToHistory()
       memcpy(&pressureHistory[0], &pressureHistory[1], (historyDepth - 1) * sizeof(int));
       historyIndex = historyDepth - 1;
     }
-    if (pressure < pressureMin)
-      pressureMin = pressure;
-    if (pressure > pressureMax)
-      pressureMax = pressure;
-    pressureHistory[historyIndex] = pressure;
+    if (outerPressure.value < outerPressureMin)
+      outerPressureMin = outerPressure.value;
+    if (outerPressure.value > outerPressureMax)
+      outerPressureMax = outerPressure.value;
+    pressureHistory[historyIndex] = outerPressure.value;
     ++historyIndex;
   }
 }
 
-bool ReadDHT12Sensor(void)
+bool ReadRoomTHSensor(void)
 {
-    roomTemperaturePred = roomTemperature;
-    roomHumidityPred = roomHumidity;
+  if (roomTemperature.isGood)
+    roomTemperature.pred = roomTemperature.value;
+  if (roomHumidity.isGood)
+    roomHumidity.pred = roomHumidity.value;
 
-    if (!sensor.read(roomTemperature, roomHumidity))
+    if (!roomTHSensor.read(roomTemperature.value, roomHumidity.value))
       return false;
 
-    CalcSred(roomTemperature, roomTemperaturePred, roomTemperatureR, roomTemperatureK);
-    CalcSred(roomHumidity, roomHumidityPred, roomHumidityR, roomHumidityK);
+    CalcAvarage(roomTemperature);
+    CalcAvarage(roomHumidity);
     
     return true;
 }
@@ -602,9 +717,9 @@ bool ReadWeather(WeatherType weatherType)
   HTTPClient http;
 
   if (weatherType == WeatherType::Forecast)
-    http.begin(ApiOpenWeatherMapOrgHost, 80, String(ApiOpenWeatherMapOrgForecast) + String(ApiAppID));
+    http.begin(ApiOpenWeatherMapOrgHost, 80, String(ApiOpenWeatherMapOrgForecast1) + String(ApiLocation) + String(ApiOpenWeatherMapOrgForecast2) + String(ApiAppID));
   else
-    http.begin(ApiOpenWeatherMapOrgHost, 80, String(ApiOpenWeatherMapOrgCurrent) + String(ApiAppID));
+    http.begin(ApiOpenWeatherMapOrgHost, 80, String(ApiOpenWeatherMapOrgCurrent1) + String(ApiLocation) + String(ApiOpenWeatherMapOrgCurrent2) + String(ApiAppID));
   
   int httpCode = http.GET();
   
@@ -640,4 +755,14 @@ bool ReadWeather(WeatherType weatherType)
   return ok;
 }
 
+void PrintError(const char* msg)
+{
+  tft.setFont(Retro8x16);
+  tft.setColor(38, 84, 120);
+  tft.fillRect(left, top, right, bottom);
+  tft.setColor(VGA_RED);
+  tft.print(msg, left + 2, top + 2);
+  tft.setColor(VGA_WHITE);
+  delay(15000);
+}
 
