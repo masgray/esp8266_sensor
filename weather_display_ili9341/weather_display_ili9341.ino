@@ -1,15 +1,15 @@
-#include <dht12.h>
-
 #include "pass.h"
+#include "timer.h"
+
+#include <dht12.h>
 
 #include <PubSubClient.h>
 #include <ESP8266WiFi.h>
+#include <UTFT.h>
 #include <ArduinoOTA.h>
 #include <ESP8266mDNS.h>
 #include <ESP8266HTTPClient.h>
 #include <ArduinoJson.h>
-
-#include <UTFT.h>
 
 extern uint8_t Retro8x16[];
 extern uint8_t Arial_round_16x24[];
@@ -37,6 +37,8 @@ constexpr const char *Device1Hello PROGMEM= "unit1/device1/hello/status";
 constexpr const char *ApiOpenWeatherMapOrgHost PROGMEM= "api.openweathermap.org";
 constexpr const char *ApiOpenWeatherMapOrgForecast PROGMEM= "/data/2.5/forecast?q=Moscow,ru&units=metric&cnt=10&APPID=";
 constexpr const char *ApiOpenWeatherMapOrgCurrent PROGMEM= "/data/2.5/weather?q=Moscow,ru&units=metric&APPID=";
+
+constexpr const char* HostName PROGMEM= "EspWeatherStationDisplay";
 
 void OnMessageArrived(char* topic, byte* payload, unsigned int length);
 
@@ -85,7 +87,6 @@ uint32_t updated = 0;
 uint32_t updatedOld = 0;
 uint32_t cycleTime = 0;
 uint32_t timeForReadForecast = 0;
-uint32_t timeForReadCurrentWeather = 0;
 
 constexpr double left = 6;
 constexpr double right = 236;
@@ -103,6 +104,12 @@ constexpr uint32_t historyTimeStep = 12*60*60*1000 / historyDepth;
 uint32_t historyTimeLastAdded = 0;
 
 uint32_t historyIndex = 0;
+
+bool runCycle = true;
+
+Timer timerMainCycle(1000, TimerState::Started);
+Timer timerForReadForecast(15*60*1000, TimerState::Started);
+Timer timerForReadCurrentWeather(60*1000, TimerState::Started);
 
 struct Vector
 {
@@ -143,6 +150,10 @@ void setup()
   ConnectToWiFi();
   updatedOld = updated = millis();
   MqttConnect();
+
+  timerForReadForecast.Start();
+  timerForReadCurrentWeather.Start();
+  timerMainCycle.Start();
 }
 
 void loop()
@@ -151,6 +162,14 @@ void loop()
   static char msg2[64];
 
   ArduinoOTA.handle();
+
+  if (!runCycle)
+  {
+    yield();
+    return;
+  }
+  
+  auto current = millis();
   
   if (!mqttClient.connected()) 
   {
@@ -158,29 +177,35 @@ void loop()
   }
   mqttClient.loop();
 
-  auto current = millis();
-  if (current - cycleTime < 1000)
+  if (!runCycle || !timerMainCycle.IsElapsed())
+  {
+    yield();
     return;
-
-  if (current - timeForReadForecast > 15*60*1000 || timeForReadForecast == 0)
-  {
-    timeForReadForecast = current;
-    if (ReadWeather(WeatherType::Forecast))
-      PrintForecastWeather();
-  }
-
-  if (current - timeForReadCurrentWeather > 60*1000 || timeForReadCurrentWeather == 0)
-  {
-    timeForReadCurrentWeather = current;
-    if (ReadWeather(WeatherType::Current))
-      PrintCurrentWeather();
   }
 
   cycleTime = current;
 
-  ReadDHT12Sensor();
+  if (runCycle && timerForReadForecast.IsElapsed())
+  {
+    timeForReadForecast = current;
+    if (ReadWeather(WeatherType::Forecast))
+      PrintForecastWeather();
+    else
+      timerForReadForecast.Reset(TimerState::Started);
+  }
 
-  if (updated != updatedOld)
+  if (runCycle && timerForReadCurrentWeather.IsElapsed())
+  {
+    if (ReadWeather(WeatherType::Current))
+      PrintCurrentWeather();
+    else
+      timerForReadCurrentWeather.Reset(TimerState::Started);
+  }
+
+  if (runCycle)
+    ReadDHT12Sensor();
+
+  if (runCycle && updated != updatedOld)
   {
     updatedOld = updated;
 
@@ -219,20 +244,23 @@ void loop()
     }
   }
 
-  uint32_t dt = (current - updatedOld)/1000;
-  if (dt < 100)
-    sprintf(msg, "%d ", dt);
-  else
-    sprintf(msg, "-  ");
-  tft.setFont(Retro8x16);
-  tft.print(msg, 114, 300);
-
-  dt = (current - timeForReadForecast)/1000/60;
-  if (dt < 100)
-    sprintf(msg, "%d ", dt);
-  else
-    sprintf(msg, "-  ");
-  tft.print(msg, 177, 300);
+  if (runCycle)
+  {
+    uint32_t dt = (current - updatedOld)/1000;
+    if (dt < 100)
+      sprintf(msg, "%d ", dt);
+    else
+      sprintf(msg, "-  ");
+    tft.setFont(Retro8x16);
+    tft.print(msg, 114, 300);
+  
+    dt = (current - timeForReadForecast)/1000/60;
+    if (dt < 100)
+      sprintf(msg, "%d ", dt);
+    else
+      sprintf(msg, "-  ");
+    tft.print(msg, 177, 300);
+  }
 }
 
 void ConnectToWiFi()
@@ -245,26 +273,11 @@ void ConnectToWiFi()
     return;
   }
 
-  WiFi.hostname("EspWeatherStationDisplay");
-  ArduinoOTA.setHostname("EspWeatherStationDisplay");
+  WiFi.hostname(HostName);
+  ArduinoOTA.setHostname(HostName);
   
   ArduinoOTA.onStart([](){
-    //
-  });
-  ArduinoOTA.onEnd([](){
-    //
-  });
-  
-  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total){
-    //
-  });
-  
-  ArduinoOTA.onError([](ota_error_t error){
-//    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
-//    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
-//    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
-//    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
-//    else if (error == OTA_END_ERROR) Serial.println("End Failed");
+    runCycle = false;
   });
   ArduinoOTA.begin();
 }
@@ -534,7 +547,7 @@ void PrintCurrentWeather()
   tft.setFont(Retro8x16);
   if (current_Rain != NAN)
   {
-    DrawNumber(current_Rain, 116, 90, false, 3, 2);
+    DrawNumber(current_Rain, 136, 90, false, 3, 2);
   }
   if (current_WindSpeed != NAN)
   {
@@ -542,7 +555,7 @@ void PrintCurrentWeather()
   }
   if (current_WindDirection != NAN)
   {
-    DrawWind(current_WindDirection, 224, 99);
+    DrawWind(current_WindDirection, 224, 100);
   }
 }
 
