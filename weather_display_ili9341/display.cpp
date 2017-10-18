@@ -1,14 +1,10 @@
 #include "display.h"
 
-#include "chart.h"
+#include <pgmspace.h>
 
 extern uint8_t Retro8x16[];
 extern uint8_t Arial_round_16x24[];
 extern unsigned short Background[];
-
-//int xPos = left;
-//int xPosPred = left;
-//int yPosPred = bottom;
 
 struct Vector
 {
@@ -73,27 +69,27 @@ void Display::DrawArrow(float value, float valueR, int x, int y)
     DrawStable(m_tft, x, y);
 }
 
-int CalcY(float p)
+int CalcY(float value, float valueMin, float valueMax)
 {
-  double yPos = ChartBottom - (ChartBottom - ChartTop) / (outerPressureMax - outerPressureMin) * (p - outerPressureMin);
+  double yPos = ChartBottom - (ChartBottom - ChartTop) / (valueMax - valueMin) * (value - valueMin);
   return yPos;
 }
 
-void Display::DrawChart(double left, double right, double top, double bottom)
+void Display::DrawChart(float valueMin, float valueMax, const History& history, int historyIndex)
 {
   m_tft.setColor(38, 84, 120);
-  m_tft.fillRect(left, top, right, bottom);
+  m_tft.fillRect(ChartLeft, ChartTop, ChartRight, ChartBottom);
   m_tft.setColor(VGA_LIME);
 
   if (historyIndex < 2)
   {
-    m_tft.drawPixel(left, CalcY(pressureHistory[0]));
+    m_tft.drawPixel(ChartLeft, CalcY(history[0], valueMin, valueMax));
   }
   else
   {
     for (int i = 1; i < historyIndex; ++i)
     {
-      m_tft.drawLine(left + i - 1, CalcY(pressureHistory[i - 1]), left + i, CalcY(pressureHistory[i]));
+      m_tft.drawLine(ChartLeft + i - 1, CalcY(history[i - 1], valueMin, valueMax), ChartLeft + i, CalcY(history[i], valueMin, valueMax));
     }
   }
   m_tft.setColor(VGA_WHITE);
@@ -116,11 +112,11 @@ void Display::DrawNumber(float number, int x, int y, bool withPlus, int charsWid
 
 void Display::PrintError(const char* msg)
 {
-  m_tft.setFont(Retro8x16);
+  SetSmallFont();
   m_tft.setColor(38, 84, 120);
   m_tft.fillRect(ChartLeft, ChartTop, ChartRight, ChartBottom);
   m_tft.setColor(VGA_RED);
-  m_tft.print(msg, left + 2, top + 2);
+  m_tft.print(msg, ChartLeft + 2, ChartTop + 2);
   m_tft.setColor(VGA_WHITE);
   delay(15000);
 }
@@ -155,7 +151,7 @@ void ClearWindArrow(UTFT& tft, int x, int y)
 
 void DrawWindArrow(UTFT& tft, int x, int y, Vector point1, Vector point2, Vector point3, Vector point4)
 {
-  ClearWindArrow(x, y);
+  ClearWindArrow(tft, x, y);
   tft.drawLine(x + point1.x, y + point1.y, x + point2.x, y + point2.y);
   tft.drawLine(x + point1.x, y + point1.y, x + point3.x, y + point3.y);
   tft.drawLine(x + point1.x, y + point1.y, x + point4.x, y + point4.y);

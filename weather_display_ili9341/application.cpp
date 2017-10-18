@@ -1,13 +1,13 @@
 #include "application.h"
 
-#include <ESP8266WiFi.h>
+#include <pgmspace.h>
 
-static const char* Error PROGMEM= "Error reading config!";
+constexpr const char* Error PROGMEM= "Error reading config!";
 
 Application::Application()
   : m_network(m_configuration, m_display, this, &m_remoteSensors)
   , m_localSensors(m_display)
-  , m_remoteSensors(m_display)
+  , m_remoteSensors(m_configuration, m_display)
 {
 }
 

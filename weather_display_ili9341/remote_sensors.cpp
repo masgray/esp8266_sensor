@@ -1,6 +1,10 @@
 #include "remote_sensors.h"
+#include "display.h"
+#include "configuration.h"
+#include "consts.h"
 
 #include <ArduinoJson.h>
+#include <ESP8266HTTPClient.h>
 
 constexpr const char *ApiOpenWeatherMapOrgHost PROGMEM= "api.openweathermap.org";
 constexpr const char *ApiOpenWeatherMapOrgForecast1 PROGMEM= "/data/2.5/forecast?q=";
@@ -8,14 +12,11 @@ constexpr const char *ApiOpenWeatherMapOrgForecast2 PROGMEM= "&units=metric&cnt=
 constexpr const char *ApiOpenWeatherMapOrgCurrent1 PROGMEM= "/data/2.5/weather?q=";
 constexpr const char *ApiOpenWeatherMapOrgCurrent2 PROGMEM= "&units=metric&APPID=";
 
-enum WeatherType
-{
-  Forecast,
-  Current
-};
+constexpr uint32_t historyTimeStep PROGMEM= 12*60*60*1000 / HistoryDepth;
 
-RemoteSensors::RemoteSensors(Display& display)
-  : m_display(display)
+RemoteSensors::RemoteSensors(Configuration& configuration, Display& display)
+  : m_configuration(configuration)
+  , m_display(display)
   , m_timerForReadForecast(15*60*1000, TimerState::Started)
   , m_timerForReadCurrentWeather(60*1000, TimerState::Started)
 {
@@ -37,22 +38,22 @@ void RemoteSensors::loop()
     m_timeForReadOuterSensors = current;
   }
 
-  if (timerForReadForecast.IsElapsed())
+  if (m_timerForReadForecast.IsElapsed())
   {
     m_timeForReadForecast = current;
     if (ReadWeather(WeatherType::Forecast))
       m_forecastWeatherReady = true;
     else
-      timerForReadForecast.Reset(TimerState::Started);
+      m_timerForReadForecast.Reset(TimerState::Started);
   }
 
-  if (timerForReadCurrentWeather.IsElapsed())
+  if (m_timerForReadCurrentWeather.IsElapsed())
   {
     m_timeForReadCurrentWeather = current;
     if (ReadWeather(WeatherType::Current))
       m_currentWeatherReady = true;
     else
-      timerForReadCurrentWeather.Reset(TimerState::Started);
+      m_timerForReadCurrentWeather.Reset(TimerState::Started);
   }
 
   Print();
@@ -77,7 +78,7 @@ bool RemoteSensors::Print()
   {
     m_display.DrawNumber(m_outerPressure.value, 46, 80, false);
     m_display.DrawArrow(m_outerPressure.value, m_outerPressure.r, 104, 93);
-    m_display.DrawChart(left, right, top, bottom);
+    m_display.DrawChart(m_outerPressureMin, m_outerPressureMax, m_pressureHistory, m_historyIndex);
   }
 
   if (m_forecastWeatherReady)
@@ -104,101 +105,106 @@ bool RemoteSensors::Print()
   return true;
 }
 
-void GetForecastJsonParams(const JsonObject& root, int lineNumber, float& t, float& clouds, float& rain, float& windSpeed, float& windDirection)
+void GetForecastJsonParams(const JsonObject& root, int lineNumber, SensorValue& t, SensorValue& clouds, SensorValue& rain, SensorValue& windSpeed, SensorValue& windDirection)
 {
   auto& line = root["list"][lineNumber];
-  t = line["main"]["temp"];
-  clouds = line["clouds"]["all"];
-  rain = line["rain"]["3h"];
-  windSpeed = line["wind"]["speed"];
-  windDirection = line["wind"]["deg"];
+  t.value = line["main"]["temp"];
+  t.isGood = t.value != NAN;
+  clouds.value = line["clouds"]["all"];
+  clouds.isGood = clouds.value != NAN;
+  rain.value = line["rain"]["3h"];
+  rain.isGood = rain.value != NAN;
+  windSpeed.value = line["wind"]["speed"];
+  windSpeed.isGood = windSpeed.value != NAN;
+  windDirection.value = line["wind"]["deg"];
+  windDirection.isGood = windDirection.value != NAN;
 }
 
-void GetCurrentWeatherJsonParams(const JsonObject& root, float& rain, float& windSpeed, float& windDirection)
+void GetCurrentWeatherJsonParams(const JsonObject& root, SensorValue& rain, SensorValue& windSpeed, SensorValue& windDirection)
 {
-  rain = root["rain"]["3h"];
-  windSpeed = root["wind"]["speed"];
-  windDirection = root["wind"]["deg"];
+  rain.value = root["rain"]["3h"];
+  rain.isGood = rain.value != NAN;
+  windSpeed.value = root["wind"]["speed"];
+  windSpeed.isGood = rain.value != NAN;
+  windDirection.value = root["wind"]["deg"];
+  windSpeed.isGood = rain.value != NAN;
 }
 
 void RemoteSensors::PrintForecastWeather()
 {
-  static char msg[32];
   m_display.SetSmallFont();
-  if (forecast12h_T != NAN)
+  if (forecast12h_T.isGood)
   {
-    m_display.DrawNumber(forecast12h_T, 44, 142, true);
+    m_display.DrawNumber(forecast12h_T.value, 44, 142, true);
   }
-  if (forecast24h_T != NAN)
+  if (forecast24h_T.isGood)
   {
-    m_display.DrawNumber(forecast24h_T, 44, 168, true);
+    m_display.DrawNumber(forecast24h_T.value, 44, 168, true);
   }
-  if (forecast12h_Clouds != NAN)
+  if (forecast12h_Clouds.isGood)
   {
-    m_display.DrawNumber(forecast12h_Clouds, 94, 142, false);
+    m_display.DrawNumber(forecast12h_Clouds.value, 94, 142, false);
   }
-  if (forecast24h_Clouds != NAN)
+  if (forecast24h_Clouds.isGood)
   {
-    m_display.DrawNumber(forecast24h_Clouds, 94, 168, false);
+    m_display.DrawNumber(forecast24h_Clouds.value, 94, 168, false);
   }
-  if (forecast12h_Rain != NAN)
+  if (forecast12h_Rain.isGood)
   {
-    dtostrf(forecast12h_Rain, 3, 2, msg);
-    tft.print(msg, 134, 142);
+    m_display.DrawNumber(forecast12h_Rain.value, 134, 142, false, 3, 2);
   }
-  if (forecast24h_Rain != NAN)
+  if (forecast24h_Rain.isGood)
   {
-    dtostrf(forecast24h_Rain, 3, 2, msg);
-    tft.print(msg, 134, 168);
+    m_display.DrawNumber(forecast24h_Rain.value, 134, 168, false, 3, 2);
   }
-  if (forecast12h_WindSpeed != NAN)
+  if (forecast12h_WindSpeed.isGood)
   {
-    m_display.DrawNumber(forecast12h_WindSpeed, 188, 142, false);
+    m_display.DrawNumber(forecast12h_WindSpeed.value, 188, 142, false);
   }
-  if (forecast24h_WindSpeed != NAN)
+  if (forecast24h_WindSpeed.isGood)
   {
-    m_display.DrawNumber(forecast24h_WindSpeed, 188, 168, false);
+    m_display.DrawNumber(forecast24h_WindSpeed.value, 188, 168, false);
   }
-  if (forecast12h_WindDirection != NAN)
+  if (forecast12h_WindDirection.isGood)
   {
-    m_display.DrawWind(forecast12h_WindDirection, 224, 151);
+    m_display.DrawWind(forecast12h_WindDirection.value, 224, 151);
   }
-  if (forecast24h_WindDirection != NAN)
+  if (forecast24h_WindDirection.isGood)
   {
-    m_display.DrawWind(forecast24h_WindDirection, 224, 177);
+    m_display.DrawWind(forecast24h_WindDirection.value, 224, 177);
   }
 }
 
-void PrintCurrentWeather()
+void RemoteSensors::PrintCurrentWeather()
 {
   m_display.SetSmallFont();
-  if (current_Rain != NAN)
+  if (current_Rain.isGood)
   {
-    m_display.DrawNumber(current_Rain, 136, 90, false, 3, 2);
+    m_display.DrawNumber(current_Rain.value, 136, 90, false, 3, 2);
   }
-  if (current_WindSpeed != NAN)
+  if (current_WindSpeed.isGood)
   {
-    m_display.DrawNumber(current_WindSpeed, 188, 90, false);
+    m_display.DrawNumber(current_WindSpeed.value, 188, 90, false);
   }
-  if (current_WindDirection != NAN)
+  if (current_WindDirection.isGood)
   {
-    m_display.DrawWind(current_WindDirection, 224, 100);
+    m_display.DrawWind(current_WindDirection.value, 224, 100);
   }
 }
 
-bool ReadWeather(WeatherType weatherType)
+bool RemoteSensors::ReadWeather(WeatherType weatherType)
 {
   bool ok = false;
   HTTPClient http;
 
   if (weatherType == WeatherType::Forecast)
-    http.begin(ApiOpenWeatherMapOrgHost, 80, String(ApiOpenWeatherMapOrgForecast1) + String(ApiLocation) + String(ApiOpenWeatherMapOrgForecast2) + String(ApiAppID));
+    http.begin(ApiOpenWeatherMapOrgHost, 80, String(ApiOpenWeatherMapOrgForecast1) + String(m_configuration.GetApiLocation()) + String(ApiOpenWeatherMapOrgForecast2) + String(m_configuration.GetApiAppID()));
   else
-    http.begin(ApiOpenWeatherMapOrgHost, 80, String(ApiOpenWeatherMapOrgCurrent1) + String(ApiLocation) + String(ApiOpenWeatherMapOrgCurrent2) + String(ApiAppID));
+    http.begin(ApiOpenWeatherMapOrgHost, 80, String(ApiOpenWeatherMapOrgCurrent1) + String(m_configuration.GetApiLocation()) + String(ApiOpenWeatherMapOrgCurrent2) + String(m_configuration.GetApiAppID()));
   
   int httpCode = http.GET();
   
-  if(httpCode > 0) 
+  if (httpCode > 0) 
   {
     if (httpCode == HTTP_CODE_OK) 
     {
@@ -282,20 +288,18 @@ void RemoteSensors::OnDataArrived(const char* topic, const uint8_t* payload, uin
 
 void RemoteSensors::AddToHistory()
 {
-  constexpr uint32_t historyTimeStep PROGMEM= 12*60*60*1000 / historyDepth;
-
   auto current = millis();
 
   if (current - m_historyTimeLastAdded > historyTimeStep || m_historyTimeLastAdded == 0)
   {
     m_historyTimeLastAdded = current;
-    if (m_historyIndex >= historyDepth)
+    if (m_historyIndex >= HistoryDepth)
     {
-      memcpy(&m_pressureHistory[0], &m_pressureHistory[1], (historyDepth - 1) * sizeof(int));
-      m_historyIndex = historyDepth - 1;
+      memcpy(&m_pressureHistory[0], &m_pressureHistory[1], (HistoryDepth - 1) * sizeof(int));
+      m_historyIndex = HistoryDepth - 1;
     }
     if (m_outerPressure.value < m_outerPressureMin)
-      m_outerPressure = m_outerPressure.value;
+      m_outerPressureMin = m_outerPressure.value;
     if (m_outerPressure.value > m_outerPressureMax)
       m_outerPressureMax = m_outerPressure.value;
     m_pressureHistory[m_historyIndex] = m_outerPressure.value;

@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cinttypes>
+#include <cmath>
+
 struct SensorValue
 {
   float value = NAN;

@@ -3,10 +3,10 @@
 #include <ArduinoJson.h>
 #include <FS.h>
 
-const char* DefaultMqttServer PROGMEM= "192.168.0.3";
-const char* DefaultMqttPort PROGMEM= "1883";
-const char* DefaultApiAppID PROGMEM= "";
-const char* DefaultApiLocation PROGMEM= "Moscow,ru";
+constexpr const char* DefaultMqttServer PROGMEM= "192.168.0.3";
+constexpr const char* DefaultMqttPort PROGMEM= "1883";
+constexpr const char* DefaultApiAppID PROGMEM= "";
+constexpr const char* DefaultApiLocation PROGMEM= "Moscow,ru";
 
 Configuration::Configuration()
 {

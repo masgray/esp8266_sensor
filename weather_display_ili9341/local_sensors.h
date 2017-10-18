@@ -17,7 +17,7 @@ public:
 
 private:
   bool Read();
-  bool Print();
+  void Print();
   
 private:
   Display& m_display;

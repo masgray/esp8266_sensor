@@ -1,23 +1,17 @@
 #include "network.h"
 #include "configuration.h"
 #include "display.h"
+#include "consts.h"
 
 #include <ESP8266WiFi.h>
 #include <ArduinoOTA.h>
 #include <DNSServer.h>
 #include <ESP8266mDNS.h>
-
-constexpr const char *prefix PROGMEM= "unit1";
-constexpr const char *deviceId PROGMEM= "unit1_device2";
-constexpr const char *Device1Sensor1 PROGMEM= "unit1/device1/sensor1/status";
-constexpr const char *Device1Sensor2 PROGMEM= "unit1/device1/sensor2/status";
-constexpr const char *Device1Sensor3 PROGMEM= "unit1/device1/sensor3/status";
-constexpr const char *Device1Error PROGMEM= "unit1/device1/error/status";
-constexpr const char *Device1Hello PROGMEM= "unit1/device1/hello/status";
+#include <pgmspace.h>
 
 constexpr const char* HostName PROGMEM= "EspWeatherStationDisplay";
-constexpr const uint16_t MqttDefaultPort PROGMEM= 1883;
-constexpr const char *DefaultApPassword PROGMEM= "DefaultPassword0001";
+constexpr const char* Error PROGMEM="Web configuring error!";
+constexpr const char* ConfigModeText PROGMEM="Connect to Wi-Fi network \"%s\"\nOpen page at http://%s\nto configure station.";
 
 namespace keys
 {
@@ -36,6 +30,7 @@ static bool shouldSaveConfig = false;
 struct NetworkContext
 {
   IMqttConsumer* mqttConsumer = nullptr;
+  Display* display = nullptr;
 };
 
 static NetworkContext s_networkContext;
@@ -54,6 +49,13 @@ Network::Network(Configuration& configuration, Display& display, RunState* runSt
   , m_mqttClient(m_wifiClient)
 {
   s_networkContext.mqttConsumer = mqttConsumer;
+  s_networkContext.display = &m_display;
+}
+
+Network::~Network()
+{
+  s_networkContext.mqttConsumer = nullptr;
+  s_networkContext.display = nullptr;
 }
 
 void Network::begin()
@@ -99,11 +101,12 @@ bool Network::Connected()
 
 void configModeCallback(WiFiManager*)
 {
+  if (!s_networkContext.display)
+    return;
   static char msg[64];
-  constexpr const char* text PROGMEM="Connect to Wi-Fi network \"%s\"\nOpen page at http://%s\nto configure station.";
   auto ip = WiFi.softAPIP().toString();
-  sprintf(msg, text, HostName, ip.c_str());
-  m_display.PrintError(msg);
+  sprintf(msg, ConfigModeText, HostName, ip.c_str());
+  s_networkContext.display->PrintError(msg);
 }
 
 void saveConfigCallback() 
@@ -118,23 +121,22 @@ void Network::ConnectToWiFi()
   m_wifiManager.setAPCallback(configModeCallback);
   m_wifiManager.setSaveConfigCallback(saveConfigCallback);
   m_wifiManager.setMinimumSignalQuality(20);
-  m_wifiManager.addParameter(parameterMqttServer.get());
-  m_wifiManager.addParameter(parameterMqttPort.get());
-  m_wifiManager.addParameter(parameterApiAppID.get());
-  m_wifiManager.addParameter(parameterApiLocation.get());
+  m_wifiManager.addParameter(m_parameterMqttServer.get());
+  m_wifiManager.addParameter(m_parameterMqttPort.get());
+  m_wifiManager.addParameter(m_parameterApiAppID.get());
+  m_wifiManager.addParameter(m_parameterApiLocation.get());
 
-  if (!m_wifiManager.autoConnect(HostName, DefaultApPassword))
+  if (!m_wifiManager.autoConnect(HostName))
   {
-    constexpr const char* Error PROGMEM="Web configuring error!";
     m_display.PrintError(Error);
     ESP.reset();
     delay(5000);
   }
 
-  m_configuration.SetMqttServer(parameterMqttServer->getValue());
-  m_configuration.SetMqttPortStr(MqttPortStr, parameterMqttPort->getValue());
-  m_configuration.SetApiAppID(ApiAppID, parameterApiAppID->getValue());
-  m_configuration.SetApiLocation(ApiLocation, parameterApiLocation->getValue());
+  m_configuration.SetMqttServer(m_parameterMqttServer->getValue());
+  m_configuration.SetMqttPortStr(m_parameterMqttPort->getValue());
+  m_configuration.SetApiAppID(m_parameterApiAppID->getValue());
+  m_configuration.SetApiLocation(m_parameterApiLocation->getValue());
 
   if (shouldSaveConfig)
   {
@@ -153,8 +155,8 @@ void Network::Connect()
   WiFi.hostname(HostName);
   ArduinoOTA.setHostname(HostName);
   
-  ArduinoOTA.onStart([](){
-    m_runState->Pause() = false;
+  ArduinoOTA.onStart([this](){
+    this->m_runState->Pause();
   });
   ArduinoOTA.begin();
 }

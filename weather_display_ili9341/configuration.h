@@ -2,15 +2,12 @@
 
 #include <Arduino.h>
 
-#include <cinttypes>
-#include <cstring>
-
 #include <pgmspace.h>
 
-static const uint32_t MqttServerMaxSize PROGMEM= 32;
-static const uint32_t MqttPortStrMaxSize PROGMEM= 6;
-static const uint32_t ApiAppIDMaxSize PROGMEM= 33;
-static const uint32_t ApiLocationMaxSize PROGMEM= 33;
+constexpr const uint32_t MqttServerMaxSize PROGMEM= 32;
+constexpr const uint32_t MqttPortStrMaxSize PROGMEM= 6;
+constexpr const uint32_t ApiAppIDMaxSize PROGMEM= 33;
+constexpr const uint32_t ApiLocationMaxSize PROGMEM= 33;
 
 class Configuration
 {
@@ -38,17 +35,5 @@ private:
   String m_mqttPortStr;
   String m_apiAppID;
   String m_apiLocation;
-};
-
-class RunState
-{
-public:
-  void Pause() { m_isRun = false; }
-  void Resume() { m_isRun = false; }
-  bool IsRun() { return m_isRun; }
-  bool IsStopped() { return !m_isRun; }
-
-private:
-  bool m_isRun;
 };
 

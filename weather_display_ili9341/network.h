@@ -1,5 +1,7 @@
 #pragma once
 
+#include "run_state.h"
+
 #include <WiFiManager.h>
 #include <PubSubClient.h>
 
@@ -16,6 +18,7 @@ class Network
 {
 public:
   Network(Configuration& configuration, Display& display, RunState* runState, IMqttConsumer* mqttConsumer);
+  ~Network();
 
   void begin();
   void loop();
@@ -24,6 +27,7 @@ public:
 private:
   void ConnectToWiFi();
   void Connect();
+  void MqttConnect();
 
 private:
   Configuration& m_configuration;

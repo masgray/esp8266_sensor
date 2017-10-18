@@ -6,11 +6,12 @@
 #include "chart.h"
 
 class Display;
+class Configuration;
 
 class RemoteSensors: public IMqttConsumer
 {
 public:
-  RemoteSensors(Display& display);
+  RemoteSensors(Configuration& configuration, Display& display);
 
   void begin();
   void loop();
@@ -18,11 +19,21 @@ public:
   void OnDataArrived(const char* topic, const uint8_t* payload, uint32_t length) final;
 
 private:
+  enum WeatherType
+  {
+    Forecast,
+    Current
+  };
+
+private:
   bool Print();
   void PrintForecastWeather();
+  void PrintCurrentWeather();
+  bool ReadWeather(WeatherType weatherType);
   void AddToHistory();
 
 private:
+  Configuration& m_configuration;
   Display& m_display;
   SensorValue m_outerTemperature;
   SensorValue m_outerHumidity;
@@ -56,7 +67,7 @@ private:
   uint32_t m_timeForReadForecast = 0;
   uint32_t m_timeForReadCurrentWeather = 0;
 
-  float m_pressureHistory[HistoryDepth]{};
+  History m_pressureHistory{};
   uint32_t m_historyTimeLastAdded = 0;
   uint32_t m_historyIndex = 0;
 };
