@@ -8,7 +8,7 @@
 #elif defined(__arm__)
   #define PROGMEM
 #elif defined(ESP8266)
-        #include <pgmspace.h>
+  #include <pgmspace.h>
 #endif
 
 const unsigned short Background[0x12C00] PROGMEM={

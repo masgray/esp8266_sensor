@@ -1,5 +1,17 @@
 #pragma once
 
+#include <Arduino.h>
+
+#include <cinttypes>
+#include <cstring>
+
+#include <pgmspace.h>
+
+static const uint32_t MqttServerMaxSize PROGMEM= 32;
+static const uint32_t MqttPortStrMaxSize PROGMEM= 6;
+static const uint32_t ApiAppIDMaxSize PROGMEM= 33;
+static const uint32_t ApiLocationMaxSize PROGMEM= 33;
+
 class Configuration
 {
 public:
@@ -7,6 +19,36 @@ public:
 
   bool Read();
   bool Write();
+
+  const char* GetMqttServer() const { return m_mqttServer.c_str(); }
+  void SetMqttServer(const char* text) { m_mqttServer = text; }
+  
+  const char* GetMqttPortStr() const { return m_mqttPortStr.c_str(); }
+  uint16_t GetMqttPort() const { return m_mqttPortStr.toInt(); }
+  void SetMqttPortStr(const char* text) { m_mqttPortStr = text; }
+
+  const char* GetApiAppID() const { return m_apiAppID.c_str(); }
+  void SetApiAppID(const char* text) { m_apiAppID = text; }
+
+  const char* GetApiLocation() const { return m_apiLocation.c_str(); }
+  void SetApiLocation(const char* text) { m_apiLocation = text; }
+
+private:
+  String m_mqttServer;
+  String m_mqttPortStr;
+  String m_apiAppID;
+  String m_apiLocation;
 };
 
+class RunState
+{
+public:
+  void Pause() { m_isRun = false; }
+  void Resume() { m_isRun = false; }
+  bool IsRun() { return m_isRun; }
+  bool IsStopped() { return !m_isRun; }
+
+private:
+  bool m_isRun;
+};
 

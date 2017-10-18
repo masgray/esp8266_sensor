@@ -9,3 +9,5 @@ struct SensorValue
   uint32_t k = 0;
 };
 
+void CalcAvarage(SensorValue& sensorValue);
+

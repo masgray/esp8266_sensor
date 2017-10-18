@@ -6,7 +6,7 @@
 #include "local_sensors.h"
 #include "remote_sensors.h"
 
-class Application
+class Application: public RunState
 {
 public:
   Application();
@@ -20,6 +20,7 @@ private:
   Display m_display;
   LocalSensors m_localSensors;
   RemoteSensors m_remoteSensors;
+  bool m_isRun = true;
 };
 
 
