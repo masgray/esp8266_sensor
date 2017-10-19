@@ -4,10 +4,10 @@
 
 #include <pgmspace.h>
 
-constexpr const uint32_t MqttServerMaxSize PROGMEM= 32;
-constexpr const uint32_t MqttPortStrMaxSize PROGMEM= 6;
-constexpr const uint32_t ApiAppIDMaxSize PROGMEM= 33;
-constexpr const uint32_t ApiLocationMaxSize PROGMEM= 33;
+constexpr const uint32_t MqttServerMaxSize PROGMEM  = 32;
+constexpr const uint32_t MqttPortStrMaxSize PROGMEM = 6;
+constexpr const uint32_t ApiAppIDMaxSize PROGMEM    = 33;
+constexpr const uint32_t ApiLocationMaxSize PROGMEM = 33;
 
 class Configuration
 {

@@ -11,7 +11,7 @@ public:
 
   void begin();
 
-  void DrawNumber(float number, int x, int y, bool withPlus, int charsWidth = 3, int precision = 0);
+  void DrawNumber(float number, int x, int y, bool withPlus, int precision = 0);
   void DrawArrow(float value, float valueR, int x, int y);
   void PrintError(const char* msg);
   void SetSmallFont();

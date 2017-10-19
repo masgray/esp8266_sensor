@@ -14,6 +14,13 @@ struct Vector
 
 constexpr int GPIO_RS PROGMEM = 5;
 
+constexpr uint16_t RgbToWord(uint8_t r, uint8_t g, uint8_t b)
+{
+  return (((r & 248) | g >> 5) << 8) | ((g & 28) << 3 | b >> 3);
+}
+
+constexpr uint16_t BackColor PROGMEM = RgbToWord(38, 84, 120);
+
 Display::Display()
   : m_tft(ILI9341_S5P, NOTINUSE, NOTINUSE, GPIO_RS)
 {
@@ -26,7 +33,7 @@ void Display::begin()
   m_tft.InitLCD(PORTRAIT);
   m_tft.clrScr();
   m_tft.setColor(VGA_WHITE);
-  m_tft.setBackColor(38, 84, 120);
+  m_tft.setBackColor(BackColor);
 
   m_displayWidth = m_tft.getDisplayXSize();
   m_displayHeight = m_tft.getDisplayYSize();
@@ -36,7 +43,7 @@ void Display::begin()
 
 void DrawStable(UTFT& tft, int x, int y)
 {
-  tft.setColor(38, 84, 120);
+  tft.setColor(BackColor);
   tft.fillRect(x-2, y, x+2, y + 8);
   tft.setColor(VGA_WHITE);
 }
@@ -77,7 +84,7 @@ int CalcY(float value, float valueMin, float valueMax)
 
 void Display::DrawChart(float valueMin, float valueMax, const History& history, int historyIndex)
 {
-  m_tft.setColor(38, 84, 120);
+  m_tft.setColor(BackColor);
   m_tft.fillRect(ChartLeft, ChartTop, ChartRight, ChartBottom);
   m_tft.setColor(VGA_LIME);
 
@@ -95,25 +102,18 @@ void Display::DrawChart(float valueMin, float valueMax, const History& history, 
   m_tft.setColor(VGA_WHITE);
 }
 
-void Display::DrawNumber(float number, int x, int y, bool withPlus, int charsWidth, int precision)
+void Display::DrawNumber(float number, int x, int y, bool withPlus, int precision)
 {
-  static char msg[32];
-  static char msg2[32];
-  dtostrf(number, charsWidth, precision, msg);
-  char* p = msg;
-  while(*p == ' ' && *p != 0)
-    ++p;
+  String text(number, precision);
   if (withPlus && number >= 0.0)
-    sprintf(msg2, "+%s ", p);
-  else
-    sprintf(msg2, "%s ", p);
-  m_tft.print(msg2, x, y);
+    text = "+" + text;
+  m_tft.print(text.c_str(), x, y);
 }
 
 void Display::PrintError(const char* msg)
 {
   SetSmallFont();
-  m_tft.setColor(38, 84, 120);
+  m_tft.setColor(BackColor);
   m_tft.fillRect(ChartLeft, ChartTop, ChartRight, ChartBottom);
   m_tft.setColor(VGA_RED);
   m_tft.print(msg, ChartLeft + 2, ChartTop + 2);
@@ -144,7 +144,7 @@ void Display::PrintLastUpdated(int x, int y, uint32_t deltaTime)
 
 void ClearWindArrow(UTFT& tft, int x, int y)
 {
-  tft.setColor(38, 84, 120);
+  tft.setColor(BackColor);
   tft.fillRect(x - 8, y - 8, x + 8, y + 8);
   tft.setColor(VGA_WHITE);
 }

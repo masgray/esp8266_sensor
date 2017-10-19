@@ -9,20 +9,20 @@
 #include <ESP8266mDNS.h>
 #include <pgmspace.h>
 
-constexpr const char* HostName PROGMEM= "EspWeatherStationDisplay";
-constexpr const char* Error PROGMEM="Web configuring error!";
-constexpr const char* ConfigModeText PROGMEM="Connect to Wi-Fi network \"%s\"\nOpen page at http://%s\nto configure station.";
+constexpr const char* HostName PROGMEM = "EspWeatherStationDisplay";
+constexpr const char* Error PROGMEM ="Web configuring error!";
+constexpr const char* ConfigModeText PROGMEM ="Connect to Wi-Fi network \"%s\"\nOpen page at http://%s\nto configure station.";
 
 namespace keys
 {
-constexpr const char* MqttServer_name  PROGMEM= "server";
-constexpr const char* MqttServer_descr PROGMEM= "MQTT server";
-constexpr const char* MqttServerPort_name  PROGMEM= "port";
-constexpr const char* MqttServerPort_descr PROGMEM= "MQTT port";
-constexpr const char* ApiAppId_name  PROGMEM= "ApiAppId";
-constexpr const char* ApiAppId_descr PROGMEM= "APPID for api.openweathermap.org";
-constexpr const char* ApiLocation_name  PROGMEM= "ApiLocation";
-constexpr const char* ApiLocation_descr PROGMEM= "Location for api.openweathermap.org in form of \"City,country code\" (Moscow,ru)";
+constexpr const char* MqttServer_name  PROGMEM = "server";
+constexpr const char* MqttServer_descr PROGMEM = "MQTT server";
+constexpr const char* MqttServerPort_name  PROGMEM = "port";
+constexpr const char* MqttServerPort_descr PROGMEM = "MQTT port";
+constexpr const char* ApiAppId_name  PROGMEM = "ApiAppId";
+constexpr const char* ApiAppId_descr PROGMEM = "APPID for api.openweathermap.org";
+constexpr const char* ApiLocation_name  PROGMEM = "ApiLocation";
+constexpr const char* ApiLocation_descr PROGMEM = "Location for api.openweathermap.org in form of \"City,country code\" (Moscow,ru)";
 }
 
 static bool shouldSaveConfig = false;

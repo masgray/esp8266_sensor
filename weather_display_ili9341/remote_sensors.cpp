@@ -6,13 +6,27 @@
 #include <ArduinoJson.h>
 #include <ESP8266HTTPClient.h>
 
-constexpr const char *ApiOpenWeatherMapOrgHost PROGMEM= "api.openweathermap.org";
-constexpr const char *ApiOpenWeatherMapOrgForecast1 PROGMEM= "/data/2.5/forecast?q=";
-constexpr const char *ApiOpenWeatherMapOrgForecast2 PROGMEM= "&units=metric&cnt=10&APPID=";
-constexpr const char *ApiOpenWeatherMapOrgCurrent1 PROGMEM= "/data/2.5/weather?q=";
-constexpr const char *ApiOpenWeatherMapOrgCurrent2 PROGMEM= "&units=metric&APPID=";
+constexpr const char *ApiOpenWeatherMapOrgHost PROGMEM = "api.openweathermap.org";
+constexpr const char *ApiOpenWeatherMapOrgForecast1 PROGMEM = "/data/2.5/forecast?q=";
+constexpr const char *ApiOpenWeatherMapOrgForecast2 PROGMEM = "&units=metric&cnt=10&APPID=";
+constexpr const char *ApiOpenWeatherMapOrgCurrent1 PROGMEM = "/data/2.5/weather?q=";
+constexpr const char *ApiOpenWeatherMapOrgCurrent2 PROGMEM = "&units=metric&APPID=";
 
-constexpr uint32_t historyTimeStep PROGMEM= 12*60*60*1000 / HistoryDepth;
+constexpr uint32_t historyTimeStep PROGMEM = 12*60*60*1000 / HistoryDepth;
+
+namespace keys
+{
+  constexpr const char * List PROGMEM = "list";
+  constexpr const char * Main PROGMEM = "main";
+  constexpr const char * Temp PROGMEM = "temp";
+  constexpr const char * Clouds PROGMEM = "clouds";
+  constexpr const char * All PROGMEM = "all";
+  constexpr const char * Rain PROGMEM = "rain";
+  constexpr const char * Rain3h PROGMEM = "3h";
+  constexpr const char * Wind PROGMEM = "wind";
+  constexpr const char * Speed PROGMEM = "speed";
+  constexpr const char * Deg PROGMEM = "deg";
+}
 
 RemoteSensors::RemoteSensors(Configuration& configuration, Display& display)
   : m_configuration(configuration)
@@ -107,26 +121,26 @@ bool RemoteSensors::Print()
 
 void GetForecastJsonParams(const JsonObject& root, int lineNumber, SensorValue& t, SensorValue& clouds, SensorValue& rain, SensorValue& windSpeed, SensorValue& windDirection)
 {
-  auto& line = root["list"][lineNumber];
-  t.value = line["main"]["temp"];
+  auto& line = root[keys::List][lineNumber];
+  t.value = line[keys::Main][keys::Temp];
   t.isGood = t.value != NAN;
-  clouds.value = line["clouds"]["all"];
+  clouds.value = line[keys::Clouds][keys::All];
   clouds.isGood = clouds.value != NAN;
-  rain.value = line["rain"]["3h"];
+  rain.value = line[keys::Rain][keys::Rain3h];
   rain.isGood = rain.value != NAN;
-  windSpeed.value = line["wind"]["speed"];
+  windSpeed.value = line[keys::Wind][keys::Speed];
   windSpeed.isGood = windSpeed.value != NAN;
-  windDirection.value = line["wind"]["deg"];
+  windDirection.value = line[keys::Wind][keys::Deg];
   windDirection.isGood = windDirection.value != NAN;
 }
 
 void GetCurrentWeatherJsonParams(const JsonObject& root, SensorValue& rain, SensorValue& windSpeed, SensorValue& windDirection)
 {
-  rain.value = root["rain"]["3h"];
+  rain.value = root[keys::Rain][keys::Rain3h];
   rain.isGood = rain.value != NAN;
-  windSpeed.value = root["wind"]["speed"];
+  windSpeed.value = root[keys::Wind][keys::Speed];
   windSpeed.isGood = rain.value != NAN;
-  windDirection.value = root["wind"]["deg"];
+  windDirection.value = root[keys::Wind][keys::Deg];
   windSpeed.isGood = rain.value != NAN;
 }
 
@@ -151,11 +165,11 @@ void RemoteSensors::PrintForecastWeather()
   }
   if (forecast12h_Rain.isGood)
   {
-    m_display.DrawNumber(forecast12h_Rain.value, 134, 142, false, 3, 2);
+    m_display.DrawNumber(forecast12h_Rain.value, 134, 142, false, 2);
   }
   if (forecast24h_Rain.isGood)
   {
-    m_display.DrawNumber(forecast24h_Rain.value, 134, 168, false, 3, 2);
+    m_display.DrawNumber(forecast24h_Rain.value, 134, 168, false, 2);
   }
   if (forecast12h_WindSpeed.isGood)
   {
@@ -180,7 +194,7 @@ void RemoteSensors::PrintCurrentWeather()
   m_display.SetSmallFont();
   if (current_Rain.isGood)
   {
-    m_display.DrawNumber(current_Rain.value, 136, 90, false, 3, 2);
+    m_display.DrawNumber(current_Rain.value, 136, 90, false, 2);
   }
   if (current_WindSpeed.isGood)
   {
@@ -295,7 +309,7 @@ void RemoteSensors::AddToHistory()
     m_historyTimeLastAdded = current;
     if (m_historyIndex >= HistoryDepth)
     {
-      memcpy(&m_pressureHistory[0], &m_pressureHistory[1], (HistoryDepth - 1) * sizeof(int));
+      memcpy(&m_pressureHistory[0], &m_pressureHistory[1], (HistoryDepth - 1) * sizeof(float));
       m_historyIndex = HistoryDepth - 1;
     }
     if (m_outerPressure.value < m_outerPressureMin)

@@ -3,10 +3,19 @@
 #include <ArduinoJson.h>
 #include <FS.h>
 
-constexpr const char* DefaultMqttServer PROGMEM= "192.168.0.3";
-constexpr const char* DefaultMqttPort PROGMEM= "1883";
-constexpr const char* DefaultApiAppID PROGMEM= "";
-constexpr const char* DefaultApiLocation PROGMEM= "Moscow,ru";
+constexpr const char* DefaultMqttServer PROGMEM = "192.168.0.3";
+constexpr const char* DefaultMqttPort PROGMEM = "1883";
+constexpr const char* DefaultApiAppID PROGMEM = "";
+constexpr const char* DefaultApiLocation PROGMEM = "Moscow,ru";
+constexpr const char* ConfigFileName PROGMEM = "/config.json";
+
+namespace keys
+{
+constexpr const char* MqttServer PROGMEM = "MqttServer";
+constexpr const char* MqttPort PROGMEM = "MqttPort";
+constexpr const char* ApiAppID PROGMEM = "ApiAppID";
+constexpr const char* ApiLocation PROGMEM = "ApiLocation";
+}
 
 Configuration::Configuration()
 {
@@ -28,15 +37,14 @@ bool Configuration::Read()
   if (!SPIFFS.begin()) 
     return false;
   
-  if (!SPIFFS.exists("/config.json"))
+  if (!SPIFFS.exists(ConfigFileName))
     return false;
 
-  File configFile = SPIFFS.open("/config.json", "r");
+  File configFile = SPIFFS.open(ConfigFileName, "r");
   if (!configFile) 
     return false;
 
   size_t size = configFile.size();
-  // Allocate a buffer to store contents of the file.
   std::unique_ptr<char[]> buf(new char[size]);
 
   configFile.readBytes(buf.get(), size);
@@ -46,10 +54,10 @@ bool Configuration::Read()
   if (!json.success()) 
     return false;
     
-  SetMqttServer(json["MqttServer"]);
-  SetMqttPortStr(json["MqttPort"]);
-  SetApiAppID(json["ApiAppID"]);
-  SetApiLocation(json["ApiLocation"]);
+  SetMqttServer(json[keys::MqttServer]);
+  SetMqttPortStr(json[keys::MqttPort]);
+  SetApiAppID(json[keys::ApiAppID]);
+  SetApiLocation(json[keys::ApiLocation]);
   return true;
 }
 
@@ -57,12 +65,12 @@ bool Configuration::Write()
 {
   DynamicJsonBuffer jsonBuffer;
   JsonObject& json = jsonBuffer.createObject();
-  json["MqttServer"] = m_mqttServer;
-  json["MqttPort"] = m_mqttPortStr;
-  json["ApiAppID"] = m_apiAppID;
-  json["ApiLocation"] = m_apiLocation;
+  json[keys::MqttServer] = m_mqttServer;
+  json[keys::MqttPort] = m_mqttPortStr;
+  json[keys::ApiAppID] = m_apiAppID;
+  json[keys::ApiLocation] = m_apiLocation;
 
-  File configFile = SPIFFS.open("/config.json", "w");
+  File configFile = SPIFFS.open(ConfigFileName, "w");
   if (!configFile)
     return false;
 

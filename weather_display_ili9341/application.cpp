@@ -2,7 +2,7 @@
 
 #include <pgmspace.h>
 
-constexpr const char* Error PROGMEM= "Error reading config!";
+constexpr const char* Error PROGMEM = "Error reading config!";
 
 Application::Application()
   : m_network(m_configuration, m_display, this, &m_remoteSensors)
