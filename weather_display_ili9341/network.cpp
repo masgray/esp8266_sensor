@@ -11,7 +11,7 @@
 
 constexpr const char* HostName PROGMEM = "EspWeatherStationDisplay";
 constexpr const char* Error PROGMEM ="Web configuring error!";
-constexpr const char* ConfigModeText PROGMEM ="Connect to Wi-Fi network \"%s\"\nOpen page at http://%s\nto configure station.";
+constexpr const char* ConfigModeText PROGMEM ="Connect to Wi-Fi network\n\"%s\"\nOpen page at\nhttp://%s\nto configure station.";
 
 namespace keys
 {
@@ -118,6 +118,7 @@ void Network::ConnectToWiFi()
 {
   WiFi.disconnect(true);
 
+  //m_wifiManager.resetSettings();
   m_wifiManager.setAPCallback(configModeCallback);
   m_wifiManager.setSaveConfigCallback(saveConfigCallback);
   m_wifiManager.setMinimumSignalQuality(20);
