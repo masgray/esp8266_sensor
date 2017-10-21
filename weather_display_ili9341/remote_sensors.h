@@ -31,6 +31,7 @@ private:
   void PrintCurrentWeather();
   bool ReadWeather(WeatherType weatherType);
   void AddToHistory();
+  void ParseMqttData();
 
 private:
   Configuration& m_configuration;
@@ -40,7 +41,6 @@ private:
   SensorValue m_outerPressure;
   float m_outerPressureMin = 730.0;
   float m_outerPressureMax = 750.0;
-  int m_outerSensorErrorCode = 0;
 
   SensorValue forecast12h_T;
   SensorValue forecast24h_T;
@@ -56,7 +56,7 @@ private:
   SensorValue current_WindSpeed;
   SensorValue current_WindDirection;
   
-  bool m_outerSensorsReady = false;
+  bool m_outerSensorsReady[3]{};
   bool m_forecastWeatherReady = false;
   bool m_currentWeatherReady = false;
 
@@ -70,5 +70,9 @@ private:
   History m_pressureHistory{};
   uint32_t m_historyTimeLastAdded = 0;
   uint32_t m_historyIndex = 0;
+
+  String m_payloadMqttSensor1;
+  String m_payloadMqttSensor2;
+  String m_payloadMqttSensor3;
 };
 

@@ -105,20 +105,22 @@ void Display::DrawChart(float valueMin, float valueMax, const History& history, 
 void Display::DrawNumber(float number, int x, int y, bool withPlus, int precision)
 {
   String text(number, precision);
+  while (text.length() != 0 && text[0] == ' ')
+    text.remove(0, 1);
   if (withPlus && number >= 0.0)
     text = "+" + text;
   m_tft.print(text.c_str(), x, y);
 }
 
-void Display::PrintError(const char* msg)
+void Display::PrintError(const char* msg, uint32_t timeout, word color)
 {
   SetSmallFont();
   m_tft.setColor(BackColor);
   m_tft.fillRect(ChartLeft, ChartTop, ChartRight, ChartBottom);
-  m_tft.setColor(VGA_RED);
+  m_tft.setColor(color);
   m_tft.print(msg, ChartLeft + 2, ChartTop + 2);
   m_tft.setColor(VGA_WHITE);
-  delay(15000);
+  delay(timeout);
 }
 
 void Display::SetSmallFont()

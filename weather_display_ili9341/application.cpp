@@ -27,8 +27,6 @@ void Application::begin()
 
 void Application::loop()
 {
-  if (IsStopped())
-    return;
   m_network.loop();
 
   if (IsStopped())

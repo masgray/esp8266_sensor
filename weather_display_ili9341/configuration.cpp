@@ -5,7 +5,6 @@
 
 constexpr const char* DefaultMqttServer PROGMEM = "192.168.0.3";
 constexpr const char* DefaultMqttPort PROGMEM = "1883";
-constexpr const char* DefaultApiAppID PROGMEM = "";
 constexpr const char* DefaultApiLocation PROGMEM = "Moscow,ru";
 constexpr const char* ConfigFileName PROGMEM = "/config.json";
 
@@ -13,7 +12,6 @@ namespace keys
 {
 constexpr const char* MqttServer PROGMEM = "MqttServer";
 constexpr const char* MqttPort PROGMEM = "MqttPort";
-constexpr const char* ApiAppID PROGMEM = "ApiAppID";
 constexpr const char* ApiLocation PROGMEM = "ApiLocation";
 }
 
@@ -24,9 +22,6 @@ Configuration::Configuration()
   
   m_mqttPortStr.reserve(MqttPortStrMaxSize);
   m_mqttPortStr = DefaultMqttPort;
-
-  m_apiAppID.reserve(ApiAppIDMaxSize);
-  m_apiAppID = DefaultApiAppID;
 
   m_apiLocation.reserve(ApiLocationMaxSize);
   m_apiLocation = DefaultApiLocation;
@@ -56,7 +51,6 @@ bool Configuration::Read()
     
   SetMqttServer(json[keys::MqttServer]);
   SetMqttPortStr(json[keys::MqttPort]);
-  SetApiAppID(json[keys::ApiAppID]);
   SetApiLocation(json[keys::ApiLocation]);
   return true;
 }
@@ -67,7 +61,6 @@ bool Configuration::Write()
   JsonObject& json = jsonBuffer.createObject();
   json[keys::MqttServer] = m_mqttServer;
   json[keys::MqttPort] = m_mqttPortStr;
-  json[keys::ApiAppID] = m_apiAppID;
   json[keys::ApiLocation] = m_apiLocation;
 
   File configFile = SPIFFS.open(ConfigFileName, "w");

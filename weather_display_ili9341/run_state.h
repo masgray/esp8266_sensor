@@ -9,6 +9,6 @@ public:
   bool IsStopped() { return !m_isRun; }
 
 private:
-  bool m_isRun;
+  bool m_isRun = true;
 };
 

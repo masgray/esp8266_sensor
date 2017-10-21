@@ -2,6 +2,7 @@
 #include "display.h"
 #include "configuration.h"
 #include "consts.h"
+#include "pass.h"
 
 #include <ArduinoJson.h>
 #include <ESP8266HTTPClient.h>
@@ -23,6 +24,7 @@ namespace keys
   constexpr const char * All PROGMEM = "all";
   constexpr const char * Rain PROGMEM = "rain";
   constexpr const char * Rain3h PROGMEM = "3h";
+  constexpr const char * Snow PROGMEM = "snow";
   constexpr const char * Wind PROGMEM = "wind";
   constexpr const char * Speed PROGMEM = "speed";
   constexpr const char * Deg PROGMEM = "deg";
@@ -46,10 +48,13 @@ void RemoteSensors::loop()
 {
   auto current = millis();
   
-  if (m_outerSensorsReady)
+  if (m_outerSensorsReady[0] || m_outerSensorsReady[1] || m_outerSensorsReady[2])
   {
-    m_outerSensorsReady = false;
+    m_outerSensorsReady[0] = false;
+    m_outerSensorsReady[1] = false;
+    m_outerSensorsReady[2] = false;
     m_timeForReadOuterSensors = current;
+    ParseMqttData();
   }
 
   if (m_timerForReadForecast.IsElapsed())
@@ -84,7 +89,7 @@ bool RemoteSensors::Print()
 
   if (m_outerHumidity.isGood)
   {
-    m_display.DrawNumber(m_outerHumidity.value, 152, 14, false);
+    m_display.DrawNumber(m_outerHumidity.value, 160, 14, false);
     m_display.DrawArrow(m_outerHumidity.value, m_outerHumidity.r, 216, 19);
   }
 
@@ -108,10 +113,10 @@ bool RemoteSensors::Print()
   }
 
   auto current = millis();
-  uint32_t dt = current - m_timeForReadOuterSensors;
+  uint32_t dt = (current - m_timeForReadOuterSensors) / 1000;
   m_display.PrintLastUpdated(114, 300, dt);
 
-  dt = current - m_timeForReadCurrentWeather;
+  dt = (current - m_timeForReadCurrentWeather) / 1000;
   m_display.PrintLastUpdated(160, 300, dt);
   
   dt = (current - m_timeForReadForecast)/1000/60;
@@ -126,7 +131,9 @@ void GetForecastJsonParams(const JsonObject& root, int lineNumber, SensorValue& 
   t.isGood = t.value != NAN;
   clouds.value = line[keys::Clouds][keys::All];
   clouds.isGood = clouds.value != NAN;
-  rain.value = line[keys::Rain][keys::Rain3h];
+  float f1 = line[keys::Rain][keys::Rain3h];
+  float f2 = line[keys::Snow][keys::Rain3h];
+  rain.value = (f1 != 0.0 ? f1 : f2);
   rain.isGood = rain.value != NAN;
   windSpeed.value = line[keys::Wind][keys::Speed];
   windSpeed.isGood = windSpeed.value != NAN;
@@ -136,12 +143,14 @@ void GetForecastJsonParams(const JsonObject& root, int lineNumber, SensorValue& 
 
 void GetCurrentWeatherJsonParams(const JsonObject& root, SensorValue& rain, SensorValue& windSpeed, SensorValue& windDirection)
 {
-  rain.value = root[keys::Rain][keys::Rain3h];
+  float f1 = root[keys::Rain][keys::Rain3h];
+  float f2 = root[keys::Snow][keys::Rain3h];
+  rain.value = (f1 != 0.0 ? f1 : f2);
   rain.isGood = rain.value != NAN;
   windSpeed.value = root[keys::Wind][keys::Speed];
   windSpeed.isGood = rain.value != NAN;
   windDirection.value = root[keys::Wind][keys::Deg];
-  windSpeed.isGood = rain.value != NAN;
+  windDirection.isGood = rain.value != NAN;
 }
 
 void RemoteSensors::PrintForecastWeather()
@@ -212,9 +221,9 @@ bool RemoteSensors::ReadWeather(WeatherType weatherType)
   HTTPClient http;
 
   if (weatherType == WeatherType::Forecast)
-    http.begin(ApiOpenWeatherMapOrgHost, 80, String(ApiOpenWeatherMapOrgForecast1) + String(m_configuration.GetApiLocation()) + String(ApiOpenWeatherMapOrgForecast2) + String(m_configuration.GetApiAppID()));
+    http.begin(ApiOpenWeatherMapOrgHost, 80, String(ApiOpenWeatherMapOrgForecast1) + String(m_configuration.GetApiLocation()) + String(ApiOpenWeatherMapOrgForecast2) + String(MyApiAppID));
   else
-    http.begin(ApiOpenWeatherMapOrgHost, 80, String(ApiOpenWeatherMapOrgCurrent1) + String(m_configuration.GetApiLocation()) + String(ApiOpenWeatherMapOrgCurrent2) + String(m_configuration.GetApiAppID()));
+    http.begin(ApiOpenWeatherMapOrgHost, 80, String(ApiOpenWeatherMapOrgCurrent1) + String(m_configuration.GetApiLocation()) + String(ApiOpenWeatherMapOrgCurrent2) + String(MyApiAppID));
   
   int httpCode = http.GET();
   
@@ -268,35 +277,47 @@ void RemoteSensors::OnDataArrived(const char* topic, const uint8_t* payload, uin
 
   if (StrEq(topic, Device1Sensor1))
   {
-    if (m_outerTemperature.isGood)
-      m_outerTemperature.pred = m_outerTemperature.value;
-    m_outerTemperature.value = text.toFloat();
-    m_outerTemperature.isGood = m_outerTemperature.value != NAN;
-    CalcAvarage(m_outerTemperature);
-    m_outerSensorsReady = true;
+    m_payloadMqttSensor1 = text;
+    m_outerSensorsReady[0] = true;
   }
   else if (StrEq(topic, Device1Sensor2))
   {
-    if (m_outerHumidity.isGood)
-      m_outerHumidity.pred = m_outerHumidity.value;
-    m_outerHumidity.value = text.toFloat();
-    m_outerHumidity.isGood = m_outerHumidity.value != NAN;
-    CalcAvarage(m_outerHumidity);
-    m_outerSensorsReady = true;
+    m_payloadMqttSensor2 = text;
+    m_outerSensorsReady[1] = true;
   }
   else if (StrEq(topic, Device1Sensor3))
   {
+    m_payloadMqttSensor3 = text;
+    m_outerSensorsReady[2] = true;
+  }
+}
+
+void RemoteSensors::ParseMqttData()
+{
+  if (m_payloadMqttSensor1.length() != 0)
+  {
+    if (m_outerTemperature.isGood)
+      m_outerTemperature.pred = m_outerTemperature.value;
+    m_outerTemperature.value = m_payloadMqttSensor1.toFloat();
+    m_outerTemperature.isGood = m_outerTemperature.value != NAN;
+    CalcAvarage(m_outerTemperature);
+  }
+  if (m_payloadMqttSensor2.length() != 0)
+  {
+    if (m_outerHumidity.isGood)
+      m_outerHumidity.pred = m_outerHumidity.value;
+    m_outerHumidity.value = m_payloadMqttSensor2.toFloat();
+    m_outerHumidity.isGood = m_outerHumidity.value != NAN;
+    CalcAvarage(m_outerHumidity);
+  }
+  if (m_payloadMqttSensor3.length() != 0)
+  {
     if (m_outerPressure.isGood)
       m_outerPressure.pred = m_outerPressure.value;
-    m_outerPressure.value = text.toFloat();
+    m_outerPressure.value = m_payloadMqttSensor3.toFloat();
     m_outerPressure.isGood = m_outerPressure.value != NAN;
     CalcAvarage(m_outerPressure);
     AddToHistory();
-    m_outerSensorsReady = true;
-  }
-  else if (StrEq(topic, Device1Error))
-  {
-    m_outerSensorErrorCode = text.toInt();
   }
 }
 

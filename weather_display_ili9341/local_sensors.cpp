@@ -36,7 +36,13 @@ bool LocalSensors::Read()
     m_roomHumidity.pred = m_roomHumidity.value;
 
   if (!m_roomTHSensor.read(m_roomTemperature.value, m_roomHumidity.value))
+  {
+    m_roomTemperature.isGood = false;
+    m_roomHumidity.isGood = false;
     return false;
+  }
+  m_roomTemperature.isGood = m_roomTemperature.value != NAN;
+  m_roomHumidity.isGood = m_roomHumidity.value != NAN;
 
   CalcAvarage(m_roomTemperature);
   CalcAvarage(m_roomHumidity);
@@ -48,13 +54,15 @@ void LocalSensors::Print()
 {
   if (m_roomTemperature.isGood)
   {
+    m_display.SetBigFont();
     m_display.DrawNumber(m_roomTemperature.value, 24, 42, true);
     m_display.DrawArrow(m_roomTemperature.value, m_roomTemperature.r, 100, 47);
   }
 
   if (m_roomHumidity.isGood)
   {
-    m_display.DrawNumber(m_roomHumidity.value, 152, 42, false);
+    m_display.SetBigFont();
+    m_display.DrawNumber(m_roomHumidity.value, 160, 42, false);
     m_display.DrawArrow(m_roomHumidity.value, m_roomHumidity.r, 216, 47);
   }
 }
