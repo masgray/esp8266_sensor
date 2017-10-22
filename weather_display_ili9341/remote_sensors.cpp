@@ -33,6 +33,7 @@ namespace keys
 RemoteSensors::RemoteSensors(Configuration& configuration, Display& display)
   : m_configuration(configuration)
   , m_display(display)
+  , m_timerForReadOuterSensors(1000, TimerState::Stopped)
   , m_timerForReadForecast(15*60*1000, TimerState::Started)
   , m_timerForReadCurrentWeather(60*1000, TimerState::Started)
 {
@@ -40,6 +41,7 @@ RemoteSensors::RemoteSensors(Configuration& configuration, Display& display)
 
 void RemoteSensors::begin()
 {
+  m_timerForReadOuterSensors.Start();
   m_timerForReadForecast.Start();
   m_timerForReadCurrentWeather.Start();
 }
@@ -48,34 +50,37 @@ void RemoteSensors::loop()
 {
   auto current = millis();
   
-  if (m_outerSensorsReady[0] || m_outerSensorsReady[1] || m_outerSensorsReady[2])
+  if (m_timerForReadOuterSensors.IsElapsed())
   {
-    m_outerSensorsReady[0] = false;
-    m_outerSensorsReady[1] = false;
-    m_outerSensorsReady[2] = false;
-    m_timeForReadOuterSensors = current;
-    ParseMqttData();
+    if (m_outerSensorsReady[0] || m_outerSensorsReady[1] || m_outerSensorsReady[2])
+    {
+      m_outerSensorsReady[0] = false;
+      m_outerSensorsReady[1] = false;
+      m_outerSensorsReady[2] = false;
+      m_timeForReadOuterSensors = current;
+      ParseMqttData();
+    }
+  
+    if (m_timerForReadForecast.IsElapsed())
+    {
+      m_timeForReadForecast = current;
+      if (ReadWeather(WeatherType::Forecast))
+        m_forecastWeatherReady = true;
+      else
+        m_timerForReadForecast.Reset(TimerState::Started);
+    }
+  
+    if (m_timerForReadCurrentWeather.IsElapsed())
+    {
+      m_timeForReadCurrentWeather = current;
+      if (ReadWeather(WeatherType::Current))
+        m_currentWeatherReady = true;
+      else
+        m_timerForReadCurrentWeather.Reset(TimerState::Started);
+    }
+  
+    Print();
   }
-
-  if (m_timerForReadForecast.IsElapsed())
-  {
-    m_timeForReadForecast = current;
-    if (ReadWeather(WeatherType::Forecast))
-      m_forecastWeatherReady = true;
-    else
-      m_timerForReadForecast.Reset(TimerState::Started);
-  }
-
-  if (m_timerForReadCurrentWeather.IsElapsed())
-  {
-    m_timeForReadCurrentWeather = current;
-    if (ReadWeather(WeatherType::Current))
-      m_currentWeatherReady = true;
-    else
-      m_timerForReadCurrentWeather.Reset(TimerState::Started);
-  }
-
-  Print();
 }
 
 bool RemoteSensors::Print()
@@ -299,6 +304,7 @@ void RemoteSensors::ParseMqttData()
     if (m_outerTemperature.isGood)
       m_outerTemperature.pred = m_outerTemperature.value;
     m_outerTemperature.value = m_payloadMqttSensor1.toFloat();
+    m_payloadMqttSensor1.remove(0);
     m_outerTemperature.isGood = m_outerTemperature.value != NAN;
     CalcAvarage(m_outerTemperature);
   }
@@ -307,6 +313,7 @@ void RemoteSensors::ParseMqttData()
     if (m_outerHumidity.isGood)
       m_outerHumidity.pred = m_outerHumidity.value;
     m_outerHumidity.value = m_payloadMqttSensor2.toFloat();
+    m_payloadMqttSensor2.remove(0);
     m_outerHumidity.isGood = m_outerHumidity.value != NAN;
     CalcAvarage(m_outerHumidity);
   }
@@ -315,6 +322,7 @@ void RemoteSensors::ParseMqttData()
     if (m_outerPressure.isGood)
       m_outerPressure.pred = m_outerPressure.value;
     m_outerPressure.value = m_payloadMqttSensor3.toFloat();
+    m_payloadMqttSensor3.remove(0);
     m_outerPressure.isGood = m_outerPressure.value != NAN;
     CalcAvarage(m_outerPressure);
     AddToHistory();

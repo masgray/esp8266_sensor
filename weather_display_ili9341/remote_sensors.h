@@ -60,6 +60,7 @@ private:
   bool m_forecastWeatherReady = false;
   bool m_currentWeatherReady = false;
 
+  Timer m_timerForReadOuterSensors;
   Timer m_timerForReadForecast;
   Timer m_timerForReadCurrentWeather;
   
