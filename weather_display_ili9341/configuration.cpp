@@ -1,6 +1,8 @@
 #include "configuration.h"
 
+//https://bblanchon.github.io/ArduinoJson/
 #include <ArduinoJson.h>
+
 #include <FS.h>
 
 constexpr const char* DefaultMqttServer PROGMEM = "192.168.0.3";
@@ -10,6 +12,8 @@ constexpr const char* ConfigFileName PROGMEM = "/config.json";
 
 namespace keys
 {
+constexpr const char* ApName PROGMEM = "ApName";
+constexpr const char* Passw PROGMEM = "Passw";
 constexpr const char* MqttServer PROGMEM = "MqttServer";
 constexpr const char* MqttPort PROGMEM = "MqttPort";
 constexpr const char* ApiLocation PROGMEM = "ApiLocation";
@@ -17,13 +21,8 @@ constexpr const char* ApiLocation PROGMEM = "ApiLocation";
 
 Configuration::Configuration()
 {
-  m_mqttServer.reserve(MqttServerMaxSize);
   m_mqttServer = DefaultMqttServer;
-  
-  m_mqttPortStr.reserve(MqttPortStrMaxSize);
   m_mqttPortStr = DefaultMqttPort;
-
-  m_apiLocation.reserve(ApiLocationMaxSize);
   m_apiLocation = DefaultApiLocation;
 }
 
@@ -48,10 +47,12 @@ bool Configuration::Read()
 
   if (!json.success()) 
     return false;
-    
-  SetMqttServer(json[keys::MqttServer]);
-  SetMqttPortStr(json[keys::MqttPort]);
-  SetApiLocation(json[keys::ApiLocation]);
+
+  SetApName(static_cast<const char*>(json[keys::ApName]));
+  SetPassw(static_cast<const char*>(json[keys::Passw]));
+  SetMqttServer(static_cast<const char*>(json[keys::MqttServer]));
+  SetMqttPortStr(static_cast<const char*>(json[keys::MqttPort]));
+  SetApiLocation(static_cast<const char*>(json[keys::ApiLocation]));
   return true;
 }
 
@@ -59,6 +60,8 @@ bool Configuration::Write()
 {
   DynamicJsonBuffer jsonBuffer;
   JsonObject& json = jsonBuffer.createObject();
+  json[keys::ApName] = m_apName;
+  json[keys::Passw] = m_passw;
   json[keys::MqttServer] = m_mqttServer;
   json[keys::MqttPort] = m_mqttPortStr;
   json[keys::ApiLocation] = m_apiLocation;

@@ -3,6 +3,8 @@
 #include "run_state.h"
 
 #include <ESP8266WiFi.h>
+
+//http://pubsubclient.knolleary.net
 #include <PubSubClient.h>
 
 class Configuration;
@@ -25,8 +27,8 @@ public:
   bool Connected();
 
 private:
-  void ConnectToWiFi();
-  void Connect();
+  bool ConnectToWiFi();
+  bool Connect();
   bool MqttConnect();
 
 private:
@@ -37,6 +39,8 @@ private:
   
   WiFiClient m_wifiClient;
   PubSubClient m_mqttClient;
+
+  bool m_isAp = false;
 };
 
 

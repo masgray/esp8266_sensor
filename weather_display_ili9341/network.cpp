@@ -11,7 +11,7 @@
 
 constexpr const char* HostName PROGMEM = "EspWeatherStationDisplay";
 constexpr const char* Connecting PROGMEM ="Connecting to Wi-Fi...";
-constexpr const char* ConnectedStr PROGMEM ="Wi-Fi connected.";
+constexpr const char* ConnectedStr PROGMEM ="IP:";
 constexpr const char* UpdatingFirmwareStr PROGMEM ="Updating firmware...";
 //constexpr const char* Error PROGMEM ="Web configuring error!";
 //constexpr const char* ConfigModeText PROGMEM ="Connect to Wi-Fi network\n\"%s\"\nOpen page at\nhttp://%s\nto configure station.";
@@ -59,17 +59,18 @@ Network::~Network()
 
 void Network::begin()
 {
-  Connect();
+  m_isAp = !Connect();
 
   m_mqttClient.setServer(m_configuration.GetMqttServer(), m_configuration.GetMqttPort());
   m_mqttClient.setCallback(OnMqttMessageArrived);
-  MqttConnect();
+  if (!m_isAp)
+    MqttConnect();
 }
 
 void Network::loop()
 {
-  if (!Connected())
-    Connect();
+  if (!Connected() && !m_isAp)
+    m_isAp= Connect();
   ArduinoOTA.handle();
   if (UpdateStarted)
   {
@@ -105,7 +106,7 @@ bool Network::Connected()
 //  shouldSaveConfig = true;
 //}
 
-void Network::ConnectToWiFi()
+bool Network::ConnectToWiFi()
 {
   m_display.PrintError(Connecting, 1000, VGA_LIME);
   WiFi.disconnect(true);
@@ -118,10 +119,26 @@ void Network::ConnectToWiFi()
 //    ESP.reset();
 //    delay(5000);
 //  }
-  WiFi.begin(ssid, password);
-  while (!Connected())
+  WiFi.begin(m_configuration.GetApName(), m_configuration.GetPassw());
+  int n = 30;
+  while (!Connected() && n)
+  {
     delay(500);
-  m_display.PrintError(ConnectedStr, 1000, VGA_LIME);
+    --n;
+  }
+  String s = ConnectedStr;
+  if (!Connected())
+  {
+    WiFi.enableAP(true);
+    WiFi.mode(WIFI_AP);
+    s += WiFi.softAPIP().toString();
+    m_display.PrintError(s.c_str());
+  }
+  else
+  {
+    s += WiFi.localIP().toString();
+    m_display.PrintError(s.c_str(), 1000, VGA_LIME);
+  }
 
 //  if (shouldSaveConfig)
 //  {
@@ -129,14 +146,13 @@ void Network::ConnectToWiFi()
 //  }
 }
 
-void Network::Connect()
+bool Network::Connect()
 {
   WiFi.hostname(HostName);
-  ConnectToWiFi();
+  if (!ConnectToWiFi())
+    return false;
   if (!Connected())
-  {
-    return;
-  }
+    return true;
 
   ArduinoOTA.setHostname(HostName);
   
@@ -144,6 +160,7 @@ void Network::Connect()
     UpdateStarted = true;
   });
   ArduinoOTA.begin();
+  return true;
 }
 
 bool Network::MqttConnect()

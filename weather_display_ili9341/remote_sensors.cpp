@@ -4,7 +4,9 @@
 #include "consts.h"
 #include "pass.h"
 
+//https://bblanchon.github.io/ArduinoJson/
 #include <ArduinoJson.h>
+
 #include <ESP8266HTTPClient.h>
 
 constexpr const char *ApiOpenWeatherMapOrgHost PROGMEM = "api.openweathermap.org";

@@ -3,6 +3,7 @@
 #include "sensor_value.h"
 #include "timer.h"
 
+//https://www.github.com/masgray/dht12
 #include <dht12.h>
 
 class Display;
