@@ -15,6 +15,7 @@
 
 class Configuration;
 class Display;
+class DNSServer;
 
 class IMqttConsumer
 {
@@ -65,6 +66,8 @@ private:
 
   AsyncWebServer m_webServer;
   bool m_isReset = false;
+
+  std::unique_ptr<DNSServer> m_dnsServer;
 };
 
 

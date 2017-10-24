@@ -5,7 +5,7 @@
 #include "pass.h"
 
 #include <ArduinoOTA.h>
-//#include <DNSServer.h>
+#include <DNSServer.h>
 #include <ESP8266mDNS.h>
 #include <pgmspace.h>
 
@@ -101,6 +101,8 @@ void Network::loop()
     return;
   if (m_wifiMode == WiFiMode::ClientMode)
     m_mqttClient.loop();
+  else if (m_dnsServer)
+    m_dnsServer->processNextRequest();
 
   if (m_isReset)
   {
@@ -138,6 +140,10 @@ Network::WiFiMode Network::ConnectToWiFi()
   s += WiFi.softAPIP().toString();
   m_display.PrintError(s.c_str());
   m_wifiMode = WiFiMode::AccessPointMode;
+  m_dnsServer.reset(new DNSServer());
+  m_dnsServer->setErrorReplyCode(DNSReplyCode::NoError);
+  constexpr uint8_t DNS_PORT = 53;
+  m_dnsServer->start(DNS_PORT, "*", WiFi.softAPIP());
   return m_wifiMode;
 }
 
