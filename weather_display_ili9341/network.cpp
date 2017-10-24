@@ -5,7 +5,7 @@
 #include "pass.h"
 
 #include <ArduinoOTA.h>
-#include <DNSServer.h>
+//#include <DNSServer.h>
 #include <ESP8266mDNS.h>
 #include <pgmspace.h>
 
@@ -21,7 +21,7 @@ constexpr const char* WebPostForm PROGMEM = R"(<!DOCTYPE HTML>
   <title>Wi-Fi weather station</title>
  </head>
  <body>  
- <form action="/save" method="post">
+ <form action="/save" method="POST">
   <p>AP name: <input type="text" name="ap_name" value="%ap_name%"></p>
   <p>Password: <input type="password" name="passw" value="%passw%"></p>
   <p>MQTT server: <input type="text" name="mqtt_server" value="%mqtt_server%"></p>
@@ -83,7 +83,7 @@ void Network::loop()
   {
     UpdateStarted = false;
     m_runState->Pause();
-    m_display.PrintError(UpdatingFirmwareStr, 1, VGA_LIME);
+    m_display.PrintError(UpdatingFirmwareStr, VGA_LIME);
   }
 
   if (m_runState->IsStopped())
@@ -102,31 +102,23 @@ void Network::loop()
   if (m_wifiMode == WiFiMode::ClientMode)
     m_mqttClient.loop();
 
-  if (m_webIsRoot)
+  if (m_isReset)
   {
-    m_webIsRoot = false;
-    WebHandleRoot();
-  }
-  if (m_webIsNotFound)
-  {
-    m_webIsNotFound = false;
-    WebHandleNotFound();
-  }
-  if (m_webIsSave)
-  {
-    m_webIsSave = false;
-    WebHandleSave();
+    delay(1000);
+    ESP.restart();
+    delay(5000);
   }
 }
 
 bool Network::Connected()
 {
-  return (m_wifiMode == WiFiMode::AccessPointMode ? WiFi.status() == WL_CONNECTED : WiFi.waitForConnectResult() == WL_CONNECTED);
+  return (m_wifiMode == WiFiMode::AccessPointMode ? true : WiFi.waitForConnectResult() == WL_CONNECTED);
+  //WiFi.status() == WL_CONNECTED
 }
 
 Network::WiFiMode Network::ConnectToWiFi()
 {
-  m_display.PrintError(Connecting, 1000, VGA_LIME);
+  m_display.PrintError(Connecting, VGA_LIME);
   WiFi.disconnect(true);
   WiFi.enableAP(false);
   WiFi.mode(WIFI_STA);
@@ -136,7 +128,7 @@ Network::WiFiMode Network::ConnectToWiFi()
   if (Connected())
   {
     s += WiFi.localIP().toString();
-    m_display.PrintError(s.c_str(), 1000, VGA_LIME);
+    m_display.PrintError(s.c_str(), VGA_LIME);
     m_wifiMode = WiFiMode::ClientMode;
     return m_wifiMode;
   }
@@ -154,7 +146,10 @@ void Network::Connect()
   WiFi.hostname(HostName);
   ConnectToWiFi();
   if (!Connected())
+  {
+    m_display.PrintError("WiFi connection error!");
     return;
+  }
 
   ArduinoOTA.setHostname(HostName);
   
@@ -177,64 +172,35 @@ bool Network::MqttConnect()
 
 void Network::SetWebIsRoot(AsyncWebServerRequest* request)
 {
-  m_requestRoot = request;
-  m_webIsRoot = true;
-}
-
-void Network::SetWebIsNotFound(AsyncWebServerRequest *request)
-{
-  m_requestNotFound = request;
-  m_webIsNotFound = true;
-}
-
-void Network::SetWebIsSave(AsyncWebServerRequest *request)
-{
-  m_requestSave = request;
-  m_webIsSave = true;
-}
-
-void Network::WebHandleRoot()
-{
-  if (!m_requestRoot)
-    return;
   String s(WebPostForm);
   s.replace("%ap_name%", m_configuration.GetApName());
   s.replace("%passw%", m_configuration.GetPassw());
   s.replace("%mqtt_server%", m_configuration.GetMqttServer());
   s.replace("%mqtt_port%", m_configuration.GetMqttPortStr());
   s.replace("%location%", m_configuration.GetApiLocation());
-  m_requestRoot->send(200, "text/html", s);
-  m_requestRoot = nullptr;
+  request->send(200, "text/html", s);
 }
 
-void Network::WebHandleSave()
+void Network::SetWebIsNotFound(AsyncWebServerRequest *request)
 {
-  if (!m_requestSave)
-    return;
-  String message = "Saved\n\n";
-  m_requestSave->send(404, "text/plain", message);
-  
-  if (m_requestSave->hasArg("ap_name"))
-    m_configuration.SetApName(m_requestSave->arg("ap_name"));
-  if (m_requestSave->hasArg("passw"))
-    m_configuration.SetPassw(m_requestSave->arg("passw"));
-  if (m_requestSave->hasArg("mqtt_server"))
-    m_configuration.SetMqttServer(m_requestSave->arg("mqtt_server"));
-  if (m_requestSave->hasArg("mqtt_port"))
-    m_configuration.SetMqttPortStr(m_requestSave->arg("mqtt_port"));
-  if (m_requestSave->hasArg("location"))
-    m_configuration.SetApiLocation(m_requestSave->arg("location"));
+  request->send(404, "text/plain", "Page Not Found\n\n");
+}
+
+void Network::SetWebIsSave(AsyncWebServerRequest *request)
+{
+  if (request->hasArg("ap_name"))
+    m_configuration.SetApName(request->arg("ap_name"));
+  if (request->hasArg("passw"))
+    m_configuration.SetPassw(request->arg("passw"));
+  if (request->hasArg("mqtt_server"))
+    m_configuration.SetMqttServer(request->arg("mqtt_server"));
+  if (request->hasArg("mqtt_port"))
+    m_configuration.SetMqttPortStr(request->arg("mqtt_port"));
+  if (request->hasArg("location"))
+    m_configuration.SetApiLocation(request->arg("location"));
 
   m_configuration.Write();
-  ESP.reset();
-  delay(5000);
-}
-
-void Network::WebHandleNotFound()
-{
-  if (!m_requestNotFound)
-    return;
-  m_requestNotFound->send(404, "text/plain", "File Not Found\n\n");
-  m_requestNotFound = nullptr;
+  m_isReset = true;
+  request->send(200, "text/plain", String("Saved\n\n"));
 }
 

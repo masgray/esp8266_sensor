@@ -112,7 +112,7 @@ void Display::DrawNumber(float number, int x, int y, bool withPlus, int precisio
   m_tft.print(text.c_str(), x, y);
 }
 
-void Display::PrintError(const char* msg, uint32_t timeout, word color)
+void Display::PrintError(const char* msg, word color)
 {
   SetSmallFont();
   m_tft.setColor(BackColor);
@@ -120,7 +120,6 @@ void Display::PrintError(const char* msg, uint32_t timeout, word color)
   m_tft.setColor(color);
   m_tft.print(msg, ChartLeft + 2, ChartTop + 2);
   m_tft.setColor(VGA_WHITE);
-  delay(timeout);
 }
 
 void Display::SetSmallFont()

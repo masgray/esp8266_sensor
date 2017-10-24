@@ -13,7 +13,7 @@ public:
 
   void DrawNumber(float number, int x, int y, bool withPlus, int precision = 0);
   void DrawArrow(float value, float valueR, int x, int y);
-  void PrintError(const char* msg, uint32_t timeout = 15000, word color = VGA_RED);
+  void PrintError(const char* msg, word color = VGA_RED);
   void SetSmallFont();
   void SetBigFont();
   void PrintLastUpdated(int x, int y, uint32_t deltaTime);
