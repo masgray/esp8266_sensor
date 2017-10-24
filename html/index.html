@@ -1,0 +1,38 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+<meta content="text/html; charset=utf-8" http-equiv="content-type"><title>Wi-Fi weather station</title>
+</head>
+<body style="color: rgb(38, 84, 120);" alink="#ee0000" link="#0000ee" vlink="#551a8b">
+<form style="background-color: rgb(38, 84, 120); color: white; width: 600px; font-family: Helvetica,Arial,sans-serif;" action="/save" method="post">
+<table style="text-align: left; width: 100%;" border="0" cellpadding="2" cellspacing="0">
+<tbody>
+	<tr>
+		<td>AP name:</td>
+		<td><input name="ap_name" value="%ap_name%" type="text"></td>
+	</tr>
+	<tr>
+		<td>Password:</td>
+		<td><input name="passw" value="%passw%" type="password"></td>
+	</tr>
+	<tr>
+		<td>MQTT server:</td>
+		<td><input name="mqtt_server" value="%mqtt_server%" type="text"></td>
+	</tr>
+	<tr>
+		<td>MQTT port:</td>
+		<td><input name="mqtt_port" value="%mqtt_port%" type="text"></td>
+	</tr>
+	<tr>
+		<td>Location:</td>
+		<td><input name="location" value="%location%" type="text"></td>
+	</tr>
+	<tr>
+		<td></td>
+		<td><input value="Save &amp; Reset" type="submit"></td>
+	</tr>
+</tbody>
+</table>
+</form>
+</body>
+</html>

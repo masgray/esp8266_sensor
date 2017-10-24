@@ -7,6 +7,12 @@
 //http://pubsubclient.knolleary.net
 #include <PubSubClient.h>
 
+//https://github.com/me-no-dev/ESPAsyncWebServer
+//git clone https://github.com/me-no-dev/ESPAsyncTCP/
+//cd ESPAsyncTCP
+//git reset --hard 9b0cc37
+#include <ESPAsyncWebServer.h>
+
 class Configuration;
 class Display;
 
@@ -26,10 +32,28 @@ public:
   void loop();
   bool Connected();
 
+public:
+  enum class WiFiMode
+  {
+    AccessPointMode,
+    ClientMode
+  };
+
+public:
+  bool IsWiFiAccessPointMode() const { m_wifiMode == WiFiMode::AccessPointMode; }
+  
 private:
-  bool ConnectToWiFi();
-  bool Connect();
+  WiFiMode ConnectToWiFi();
+  void Connect();
   bool MqttConnect();
+  void OnMqttMessageArrived(char* topic, uint8_t* payload, unsigned int length);
+
+  void SetWebIsRoot(AsyncWebServerRequest* request);
+  void SetWebIsNotFound(AsyncWebServerRequest* request);
+  void SetWebIsSave(AsyncWebServerRequest* request);
+  void WebHandleRoot();
+  void WebHandleNotFound();
+  void WebHandleSave();
 
 private:
   Configuration& m_configuration;
@@ -40,7 +64,15 @@ private:
   WiFiClient m_wifiClient;
   PubSubClient m_mqttClient;
 
-  bool m_isAp = false;
+  WiFiMode m_wifiMode = WiFiMode::ClientMode;
+
+  AsyncWebServer m_webServer;
+  bool m_webIsRoot = false;
+  bool m_webIsNotFound = false;
+  bool m_webIsSave = false;
+  AsyncWebServerRequest* m_requestRoot = nullptr;
+  AsyncWebServerRequest* m_requestNotFound = nullptr;
+  AsyncWebServerRequest* m_requestSave = nullptr;
 };
 
 

@@ -13,33 +13,31 @@ constexpr const char* HostName PROGMEM = "EspWeatherStationDisplay";
 constexpr const char* Connecting PROGMEM ="Connecting to Wi-Fi...";
 constexpr const char* ConnectedStr PROGMEM ="IP:";
 constexpr const char* UpdatingFirmwareStr PROGMEM ="Updating firmware...";
-//constexpr const char* Error PROGMEM ="Web configuring error!";
-//constexpr const char* ConfigModeText PROGMEM ="Connect to Wi-Fi network\n\"%s\"\nOpen page at\nhttp://%s\nto configure station.";
 
-//namespace keys
-//{
-//constexpr const char* MqttServer_name  PROGMEM = "server";
-//constexpr const char* MqttServer_descr PROGMEM = "MQTT server";
-//constexpr const char* MqttServerPort_name  PROGMEM = "port";
-//constexpr const char* MqttServerPort_descr PROGMEM = "MQTT port";
-//constexpr const char* ApiLocation_name  PROGMEM = "ApiLocation";
-//constexpr const char* ApiLocation_descr PROGMEM = "Location for api.openweathermap.org in form of \"City,country code\" (Moscow,ru)";
-//}
+constexpr const char* WebPostForm PROGMEM = R"(<!DOCTYPE HTML>
+<html>
+ <head>
+  <meta charset="utf-8">
+  <title>Wi-Fi weather station</title>
+ </head>
+ <body>  
+ <form action="/save" method="post">
+  <p>AP name: <input type="text" name="ap_name" value="%ap_name%"></p>
+  <p>Password: <input type="password" name="passw" value="%passw%"></p>
+  <p>MQTT server: <input type="text" name="mqtt_server" value="%mqtt_server%"></p>
+  <p>MQTT port: <input type="text" name="mqtt_port" value="%mqtt_port%"></p>
+  <p>Location: <input type="text" name="location" value="%location%"></p>
+  <p><input type="submit" value="Save"></p>
+ </form>
+ </body>
+</html>
+)";
 
-//static bool shouldSaveConfig = false;
 static bool UpdateStarted = false;
 
-struct NetworkContext
+void Network::OnMqttMessageArrived(char* topic, uint8_t* payload, unsigned int length)
 {
-  IMqttConsumer* mqttConsumer = nullptr;
-};
-
-static NetworkContext s_networkContext;
-
-void OnMqttMessageArrived(char* topic, uint8_t* payload, unsigned int length)
-{
-  if (s_networkContext.mqttConsumer)
-    s_networkContext.mqttConsumer->OnDataArrived(topic, payload, length);
+  m_mqttConsumer->OnDataArrived(topic, payload, length);
 }
 
 Network::Network(Configuration& configuration, Display& display, RunState* runState, IMqttConsumer* mqttConsumer)
@@ -48,29 +46,38 @@ Network::Network(Configuration& configuration, Display& display, RunState* runSt
   , m_runState(runState)
   , m_mqttConsumer(mqttConsumer)
   , m_mqttClient(m_wifiClient)
+  , m_webServer(80)
 {
-  s_networkContext.mqttConsumer = mqttConsumer;
 }
 
 Network::~Network()
 {
-  s_networkContext.mqttConsumer = nullptr;
 }
 
 void Network::begin()
 {
-  m_isAp = !Connect();
+  Connect();
 
   m_mqttClient.setServer(m_configuration.GetMqttServer(), m_configuration.GetMqttPort());
-  m_mqttClient.setCallback(OnMqttMessageArrived);
-  if (!m_isAp)
+  m_mqttClient.setCallback(std::bind(&Network::OnMqttMessageArrived, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+  if (m_wifiMode == WiFiMode::ClientMode)
     MqttConnect();
+
+  m_webServer.on("/heap", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(200, "text/plain", String(ESP.getFreeHeap()));
+  });
+
+  m_webServer.on("/", std::bind(&Network::SetWebIsRoot, this, std::placeholders::_1));
+  m_webServer.on("/save", HTTP_POST, std::bind(&Network::SetWebIsSave, this, std::placeholders::_1));
+  m_webServer.onNotFound(std::bind(&Network::SetWebIsNotFound, this, std::placeholders::_1));
+  
+  m_webServer.begin();
 }
 
 void Network::loop()
 {
-  if (!Connected() && !m_isAp)
-    m_isAp= Connect();
+  if (!Connected())
+    Connect();
   ArduinoOTA.handle();
   if (UpdateStarted)
   {
@@ -85,74 +92,69 @@ void Network::loop()
   if (!Connected())
     return;
     
-  if (!m_mqttClient.connected())
+  if (!m_mqttClient.connected() && m_wifiMode == WiFiMode::ClientMode)
   {
     MqttConnect();
   }
 
   if (m_runState->IsStopped())
     return;
-  m_mqttClient.loop();
+  if (m_wifiMode == WiFiMode::ClientMode)
+    m_mqttClient.loop();
+
+  if (m_webIsRoot)
+  {
+    m_webIsRoot = false;
+    WebHandleRoot();
+  }
+  if (m_webIsNotFound)
+  {
+    m_webIsNotFound = false;
+    WebHandleNotFound();
+  }
+  if (m_webIsSave)
+  {
+    m_webIsSave = false;
+    WebHandleSave();
+  }
 }
 
 bool Network::Connected()
 {
-  return WiFi.waitForConnectResult() == WL_CONNECTED;
-  //return WiFi.status() == WL_CONNECTED;
+  return (m_wifiMode == WiFiMode::AccessPointMode ? WiFi.status() == WL_CONNECTED : WiFi.waitForConnectResult() == WL_CONNECTED);
 }
 
-//void saveConfigCallback() 
-//{
-//  shouldSaveConfig = true;
-//}
-
-bool Network::ConnectToWiFi()
+Network::WiFiMode Network::ConnectToWiFi()
 {
   m_display.PrintError(Connecting, 1000, VGA_LIME);
   WiFi.disconnect(true);
   WiFi.enableAP(false);
   WiFi.mode(WIFI_STA);
 
-//  if (!m_wifiManager.autoConnect(HostName))
-//  {
-//    m_display.PrintError(Error);
-//    ESP.reset();
-//    delay(5000);
-//  }
   WiFi.begin(m_configuration.GetApName(), m_configuration.GetPassw());
-  int n = 30;
-  while (!Connected() && n)
-  {
-    delay(500);
-    --n;
-  }
   String s = ConnectedStr;
-  if (!Connected())
-  {
-    WiFi.enableAP(true);
-    WiFi.mode(WIFI_AP);
-    s += WiFi.softAPIP().toString();
-    m_display.PrintError(s.c_str());
-  }
-  else
+  if (Connected())
   {
     s += WiFi.localIP().toString();
     m_display.PrintError(s.c_str(), 1000, VGA_LIME);
+    m_wifiMode = WiFiMode::ClientMode;
+    return m_wifiMode;
   }
-
-//  if (shouldSaveConfig)
-//  {
-//    m_configuration.Write();
-//  }
+  
+  WiFi.enableAP(true);
+  WiFi.mode(WIFI_AP);
+  s += WiFi.softAPIP().toString();
+  m_display.PrintError(s.c_str());
+  m_wifiMode = WiFiMode::AccessPointMode;
+  return m_wifiMode;
 }
 
-bool Network::Connect()
+void Network::Connect()
 {
   WiFi.hostname(HostName);
-  if (!ConnectToWiFi())
-    return false;
+  ConnectToWiFi();
   if (!Connected())
-    return true;
+    return;
 
   ArduinoOTA.setHostname(HostName);
   
@@ -160,7 +162,6 @@ bool Network::Connect()
     UpdateStarted = true;
   });
   ArduinoOTA.begin();
-  return true;
 }
 
 bool Network::MqttConnect()
@@ -172,5 +173,68 @@ bool Network::MqttConnect()
       !m_mqttClient.subscribe(Device1Error))
     return false;
   return m_mqttClient.connected();
+}
+
+void Network::SetWebIsRoot(AsyncWebServerRequest* request)
+{
+  m_requestRoot = request;
+  m_webIsRoot = true;
+}
+
+void Network::SetWebIsNotFound(AsyncWebServerRequest *request)
+{
+  m_requestNotFound = request;
+  m_webIsNotFound = true;
+}
+
+void Network::SetWebIsSave(AsyncWebServerRequest *request)
+{
+  m_requestSave = request;
+  m_webIsSave = true;
+}
+
+void Network::WebHandleRoot()
+{
+  if (!m_requestRoot)
+    return;
+  String s(WebPostForm);
+  s.replace("%ap_name%", m_configuration.GetApName());
+  s.replace("%passw%", m_configuration.GetPassw());
+  s.replace("%mqtt_server%", m_configuration.GetMqttServer());
+  s.replace("%mqtt_port%", m_configuration.GetMqttPortStr());
+  s.replace("%location%", m_configuration.GetApiLocation());
+  m_requestRoot->send(200, "text/html", s);
+  m_requestRoot = nullptr;
+}
+
+void Network::WebHandleSave()
+{
+  if (!m_requestSave)
+    return;
+  String message = "Saved\n\n";
+  m_requestSave->send(404, "text/plain", message);
+  
+  if (m_requestSave->hasArg("ap_name"))
+    m_configuration.SetApName(m_requestSave->arg("ap_name"));
+  if (m_requestSave->hasArg("passw"))
+    m_configuration.SetPassw(m_requestSave->arg("passw"));
+  if (m_requestSave->hasArg("mqtt_server"))
+    m_configuration.SetMqttServer(m_requestSave->arg("mqtt_server"));
+  if (m_requestSave->hasArg("mqtt_port"))
+    m_configuration.SetMqttPortStr(m_requestSave->arg("mqtt_port"));
+  if (m_requestSave->hasArg("location"))
+    m_configuration.SetApiLocation(m_requestSave->arg("location"));
+
+  m_configuration.Write();
+  ESP.reset();
+  delay(5000);
+}
+
+void Network::WebHandleNotFound()
+{
+  if (!m_requestNotFound)
+    return;
+  m_requestNotFound->send(404, "text/plain", "File Not Found\n\n");
+  m_requestNotFound = nullptr;
 }
 
