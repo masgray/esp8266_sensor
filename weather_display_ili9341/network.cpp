@@ -11,28 +11,78 @@
 
 constexpr const char* HostName PROGMEM = "EspWeatherStationDisplay";
 constexpr const char* Connecting PROGMEM ="Connecting to Wi-Fi...";
-constexpr const char* ConnectedStr PROGMEM ="IP:";
+constexpr const char* ConnectedStr PROGMEM ="IP: ";
 constexpr const char* UpdatingFirmwareStr PROGMEM ="Updating firmware...";
+constexpr const char* WiFiConnectionError PROGMEM = "WiFi connection error!";
 
-constexpr const char* WebPostForm PROGMEM = R"(<!DOCTYPE HTML>
+namespace web
+{
+constexpr const char* HtmlHeader PROGMEM = R"(<!DOCTYPE HTML>
 <html>
  <head>
-  <meta charset="utf-8">
+  <meta charset="utf-8"/>
   <title>Wi-Fi weather station</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no"/>
  </head>
- <body>  
- <form action="/save" method="POST">
-  <p>AP name: <input type="text" name="ap_name" value="%ap_name%"></p>
-  <p>Password: <input type="password" name="passw" value="%passw%"></p>
-  <p>MQTT server: <input type="text" name="mqtt_server" value="%mqtt_server%"></p>
-  <p>MQTT port: <input type="text" name="mqtt_port" value="%mqtt_port%"></p>
-  <p>Location: <input type="text" name="location" value="%location%"></p>
-  <p><input type="submit" value="Save"></p>
- </form>
+ <body style="background-color: rgb(38, 84, 120); color: white; font-family: Helvetica,Arial,sans-serif;">
+ <table align="center">
+ <tr>
+ <td>
+)";
+
+constexpr const char* HtmlFooter PROGMEM = R"( </td>
+ </tr>
+ </table>
  </body>
 </html>
 )";
 
+constexpr const char* HtmlPostForm PROGMEM = R"(
+ <form action="/save" method="POST" align="left">
+ <table>
+  <tr>
+    <td>AP name:</td>
+    <td><input type="text" name="ap_name" value="%ap_name%"></td>
+  </tr>
+  <tr>
+    <td>Password:</td>
+    <td><input type="password" name="passw"></td>
+  </tr>
+  <tr>
+    <td>MQTT server:</td>
+    <td><input type="text" name="mqtt_server" value="%mqtt_server%"></td>
+  </tr>
+  <tr>
+    <td>MQTT port:</td>
+    <td><input type="text" name="mqtt_port" value="%mqtt_port%"></td>
+  </tr>
+  <tr>
+    <td>Location:</td>
+    <td><input type="text" name="location" value="%location%"></td>
+  </tr>
+  <tr>
+    <td align="center" colspan=2><input type="submit" value="Save & Restart"></td>
+  </tr>
+ </form>
+)";
+
+constexpr const char* percent PROGMEM = "%";
+constexpr const char* ap_name PROGMEM = "ap_name";
+constexpr const char* passw PROGMEM = "passw";
+constexpr const char* mqtt_server PROGMEM = "mqtt_server";
+constexpr const char* mqtt_port PROGMEM = "mqtt_port";
+constexpr const char* location PROGMEM = "location";
+constexpr const char* text_html PROGMEM = "text/html";
+constexpr const char* text_plain PROGMEM = "text/plain";
+constexpr const char* pathRoot PROGMEM = "/";
+constexpr const char* pathHeap PROGMEM = "/heap";
+constexpr const char* pathSave PROGMEM = "/save";
+constexpr const char* PageNotFound PROGMEM = "Page Not Found!\n\n";
+constexpr const char* PageSaved PROGMEM = "<p>Saved.</p>\n<p>Trying to connect to Wi-Fi network...</p>\n";
+}
+
+constexpr uint8_t DNS_PORT PROGMEM = 53;
+  
 static bool UpdateStarted = false;
 
 void Network::OnMqttMessageArrived(char* topic, uint8_t* payload, unsigned int length)
@@ -63,12 +113,12 @@ void Network::begin()
   if (m_wifiMode == WiFiMode::ClientMode)
     MqttConnect();
 
-  m_webServer.on("/heap", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(200, "text/plain", String(ESP.getFreeHeap()));
+  m_webServer.on(web::pathHeap, HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(200, web::text_html, String(web::HtmlHeader) + String(ESP.getFreeHeap()) + String(web::HtmlFooter));
   });
 
-  m_webServer.on("/", std::bind(&Network::SetWebIsRoot, this, std::placeholders::_1));
-  m_webServer.on("/save", HTTP_POST, std::bind(&Network::SetWebIsSave, this, std::placeholders::_1));
+  m_webServer.on(web::pathRoot, std::bind(&Network::SetWebIsRoot, this, std::placeholders::_1));
+  m_webServer.on(web::pathSave, HTTP_POST, std::bind(&Network::SetWebIsSave, this, std::placeholders::_1));
   m_webServer.onNotFound(std::bind(&Network::SetWebIsNotFound, this, std::placeholders::_1));
   
   m_webServer.begin();
@@ -142,7 +192,6 @@ Network::WiFiMode Network::ConnectToWiFi()
   m_wifiMode = WiFiMode::AccessPointMode;
   m_dnsServer.reset(new DNSServer());
   m_dnsServer->setErrorReplyCode(DNSReplyCode::NoError);
-  constexpr uint8_t DNS_PORT = 53;
   m_dnsServer->start(DNS_PORT, "*", WiFi.softAPIP());
   return m_wifiMode;
 }
@@ -153,7 +202,7 @@ void Network::Connect()
   ConnectToWiFi();
   if (!Connected())
   {
-    m_display.PrintError("WiFi connection error!");
+    m_display.PrintError(WiFiConnectionError);
     return;
   }
 
@@ -178,35 +227,34 @@ bool Network::MqttConnect()
 
 void Network::SetWebIsRoot(AsyncWebServerRequest* request)
 {
-  String s(WebPostForm);
-  s.replace("%ap_name%", m_configuration.GetApName());
-  s.replace("%passw%", m_configuration.GetPassw());
-  s.replace("%mqtt_server%", m_configuration.GetMqttServer());
-  s.replace("%mqtt_port%", m_configuration.GetMqttPortStr());
-  s.replace("%location%", m_configuration.GetApiLocation());
-  request->send(200, "text/html", s);
+  String s(web::HtmlPostForm);
+  s.replace(String(web::percent) + web::ap_name + String(web::percent), m_configuration.GetApName());
+  s.replace(String(web::percent) + web::mqtt_server + String(web::percent), m_configuration.GetMqttServer());
+  s.replace(String(web::percent) + web::mqtt_port + String(web::percent), m_configuration.GetMqttPortStr());
+  s.replace(String(web::percent) + web::location + String(web::percent), m_configuration.GetApiLocation());
+  request->send(200, web::text_html, String(web::HtmlHeader) + s + String(web::HtmlFooter));
 }
 
 void Network::SetWebIsNotFound(AsyncWebServerRequest *request)
 {
-  request->send(404, "text/plain", "Page Not Found\n\n");
+  request->send(404, web::text_html, String(web::HtmlHeader) + web::PageNotFound + String(web::HtmlFooter));
 }
 
 void Network::SetWebIsSave(AsyncWebServerRequest *request)
 {
-  if (request->hasArg("ap_name"))
-    m_configuration.SetApName(request->arg("ap_name"));
-  if (request->hasArg("passw"))
-    m_configuration.SetPassw(request->arg("passw"));
-  if (request->hasArg("mqtt_server"))
-    m_configuration.SetMqttServer(request->arg("mqtt_server"));
-  if (request->hasArg("mqtt_port"))
-    m_configuration.SetMqttPortStr(request->arg("mqtt_port"));
-  if (request->hasArg("location"))
-    m_configuration.SetApiLocation(request->arg("location"));
+  if (request->hasArg(web::ap_name))
+    m_configuration.SetApName(request->arg(web::ap_name));
+  if (request->hasArg(web::passw))
+    m_configuration.SetPassw(request->arg(web::passw));
+  if (request->hasArg(web::mqtt_server))
+    m_configuration.SetMqttServer(request->arg(web::mqtt_server));
+  if (request->hasArg(web::mqtt_port))
+    m_configuration.SetMqttPortStr(request->arg(web::mqtt_port));
+  if (request->hasArg(web::location))
+    m_configuration.SetApiLocation(request->arg(web::location));
 
   m_configuration.Write();
   m_isReset = true;
-  request->send(200, "text/plain", String("Saved\n\n"));
+  request->send(200, web::text_html, String(web::HtmlHeader) + web::PageSaved + String(web::HtmlFooter));
 }
 
