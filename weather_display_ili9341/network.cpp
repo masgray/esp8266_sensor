@@ -46,7 +46,7 @@ constexpr const char* HtmlPostForm PROGMEM = R"(
   </tr>
   <tr>
     <td>Password:</td>
-    <td><input type="password" name="passw"></td>
+    <td><input type="password" name="passw" value="%passw%"></td>
   </tr>
   <tr>
     <td>MQTT server:</td>
@@ -61,6 +61,10 @@ constexpr const char* HtmlPostForm PROGMEM = R"(
     <td><input type="text" name="location" value="%location%"></td>
   </tr>
   <tr>
+    <td>Lighting brightness<br>for turn off LCD: </td>
+    <td><input type="text" name="lcd_led_brightness_setpoint" value="%lcd_led_brightness_setpoint%"></td>
+  </tr>
+  <tr>
     <td align="center" colspan=2><input type="submit" value="Save & Restart"></td>
   </tr>
  </form>
@@ -72,6 +76,7 @@ constexpr const char* passw PROGMEM = "passw";
 constexpr const char* mqtt_server PROGMEM = "mqtt_server";
 constexpr const char* mqtt_port PROGMEM = "mqtt_port";
 constexpr const char* location PROGMEM = "location";
+constexpr const char* lcd_led_brightness_setpoint PROGMEM = "lcd_led_brightness_setpoint";
 constexpr const char* text_html PROGMEM = "text/html";
 constexpr const char* text_plain PROGMEM = "text/plain";
 constexpr const char* pathRoot PROGMEM = "/";
@@ -229,9 +234,11 @@ void Network::SetWebIsRoot(AsyncWebServerRequest* request)
 {
   String s(web::HtmlPostForm);
   s.replace(String(web::percent) + web::ap_name + String(web::percent), m_configuration.GetApName());
+  s.replace(String(web::percent) + web::passw + String(web::percent), m_configuration.GetPassw());
   s.replace(String(web::percent) + web::mqtt_server + String(web::percent), m_configuration.GetMqttServer());
   s.replace(String(web::percent) + web::mqtt_port + String(web::percent), m_configuration.GetMqttPortStr());
   s.replace(String(web::percent) + web::location + String(web::percent), m_configuration.GetApiLocation());
+  s.replace(String(web::percent) + web::lcd_led_brightness_setpoint + String(web::percent), m_configuration.GetLcdLedBrightnessSetpointStr());
   request->send(200, web::text_html, String(web::HtmlHeader) + s + String(web::HtmlFooter));
 }
 
@@ -252,6 +259,8 @@ void Network::SetWebIsSave(AsyncWebServerRequest *request)
     m_configuration.SetMqttPortStr(request->arg(web::mqtt_port));
   if (request->hasArg(web::location))
     m_configuration.SetApiLocation(request->arg(web::location));
+  if (request->hasArg(web::lcd_led_brightness_setpoint))
+    m_configuration.SetLcdLedBrightnessSetpointStr(request->arg(web::lcd_led_brightness_setpoint));
 
   m_configuration.Write();
   m_isReset = true;

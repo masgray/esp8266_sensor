@@ -19,6 +19,7 @@ public:
   void PrintLastUpdated(int x, int y, uint32_t deltaTime);
   void DrawWind(float windDir, int x, int y);
   void DrawChart(float valueMin, float valueMax, const History& history, int historyIndex);
+  void TurnLcdLedOnOff(bool onOff);
 
 private:
   UTFT m_tft;

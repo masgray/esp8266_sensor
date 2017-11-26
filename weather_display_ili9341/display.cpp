@@ -13,6 +13,7 @@ struct Vector
 };
 
 constexpr int GPIO_RS PROGMEM = 5;
+constexpr int GPIO_LCD_LED PROGMEM = 16;
 
 constexpr uint16_t RgbToWord(uint8_t r, uint8_t g, uint8_t b)
 {
@@ -29,6 +30,8 @@ Display::Display()
 void Display::begin()
 {
   pinMode(GPIO_RS, OUTPUT);
+  pinMode(GPIO_LCD_LED, OUTPUT);
+  digitalWrite(GPIO_LCD_LED, HIGH);
   
   m_tft.InitLCD(PORTRAIT);
   m_tft.clrScr();
@@ -109,6 +112,7 @@ void Display::DrawNumber(float number, int x, int y, bool withPlus, int precisio
     text.remove(0, 1);
   if (withPlus && number >= 0.0)
     text = "+" + text;
+  text += " ";
   m_tft.print(text.c_str(), x, y);
 }
 
@@ -180,4 +184,8 @@ void Display::DrawWind(float windDir, int x, int y)
   DrawWindArrow(m_tft, x, y, point1, point2, point3, point4);
 }
 
+void Display::TurnLcdLedOnOff(bool onOff)
+{
+  digitalWrite(GPIO_LCD_LED, (onOff ? HIGH : LOW));
+}
 

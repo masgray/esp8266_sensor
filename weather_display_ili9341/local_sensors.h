@@ -7,11 +7,12 @@
 #include <dht12.h>
 
 class Display;
+class Configuration;
 
 class LocalSensors
 {
 public:
-  LocalSensors(Display& display);
+  LocalSensors(Configuration& configuration, Display& display);
 
   void begin();
   void loop();
@@ -21,13 +22,16 @@ private:
   void Print();
   
 private:
+  Configuration& m_configuration;
   Display& m_display;
 
   Dht12 m_roomTHSensor;
   SensorValue m_roomTemperature;
   SensorValue m_roomHumidity;
+  SensorValue m_roomLight;
 
   Timer m_timerForReadSensors;
+  Timer m_timerForReadAnalogue;
 };
 
 

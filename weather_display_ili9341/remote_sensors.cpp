@@ -121,13 +121,13 @@ bool RemoteSensors::Print()
 
   auto current = millis();
   uint32_t dt = (current - m_timeForReadOuterSensors) / 1000;
-  m_display.PrintLastUpdated(114, 300, dt);
+  m_display.PrintLastUpdated(114, 298, dt);
 
   dt = (current - m_timeForReadCurrentWeather) / 1000;
-  m_display.PrintLastUpdated(160, 300, dt);
+  m_display.PrintLastUpdated(160, 298, dt);
   
   dt = (current - m_timeForReadForecast)/1000/60;
-  m_display.PrintLastUpdated(200, 300, dt);
+  m_display.PrintLastUpdated(200, 298, dt);
   return true;
 }
 

@@ -33,11 +33,18 @@ public:
   void SetApiLocation(const char* text) { m_apiLocation = text; }
   void SetApiLocation(const String& text) { m_apiLocation = text; }
 
+  const char* GetLcdLedBrightnessSetpointStr() const { return m_lcdLedBrightnessSetpointStr.c_str(); }
+  uint16_t GetLcdLedBrightnessSetpoint() const { return m_lcdLedBrightnessSetpointStr.toInt(); }
+  
+  void SetLcdLedBrightnessSetpointStr(const char* text) { m_lcdLedBrightnessSetpointStr = text; }
+  void SetLcdLedBrightnessSetpointStr(const String& text) { m_lcdLedBrightnessSetpointStr = text; }
+
 private:
   String m_apName;
   String m_passw;
   String m_mqttServer;
   String m_mqttPortStr;
   String m_apiLocation;
+  String m_lcdLedBrightnessSetpointStr;
 };
 

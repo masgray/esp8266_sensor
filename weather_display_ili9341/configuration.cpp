@@ -8,6 +8,7 @@
 constexpr const char* DefaultMqttServer PROGMEM = "192.168.0.3";
 constexpr const char* DefaultMqttPort PROGMEM = "1883";
 constexpr const char* DefaultApiLocation PROGMEM = "Moscow,ru";
+constexpr const char* DefaultLcdLedBrightnessSetpoint PROGMEM = "20";
 constexpr const char* ConfigFileName PROGMEM = "/config.json";
 
 namespace keys
@@ -17,13 +18,15 @@ constexpr const char* Passw PROGMEM = "Passw";
 constexpr const char* MqttServer PROGMEM = "MqttServer";
 constexpr const char* MqttPort PROGMEM = "MqttPort";
 constexpr const char* ApiLocation PROGMEM = "ApiLocation";
+constexpr const char* LcdLedBrightnessSetpoint PROGMEM = "LcdLedBrightnessSetpoint";
 }
 
 Configuration::Configuration()
+  : m_mqttServer(DefaultMqttServer)
+  , m_mqttPortStr(DefaultMqttPort)
+  , m_apiLocation(DefaultApiLocation)
+  , m_lcdLedBrightnessSetpointStr(DefaultLcdLedBrightnessSetpoint)
 {
-  m_mqttServer = DefaultMqttServer;
-  m_mqttPortStr = DefaultMqttPort;
-  m_apiLocation = DefaultApiLocation;
 }
 
 bool Configuration::Read()
@@ -53,6 +56,7 @@ bool Configuration::Read()
   SetMqttServer(static_cast<const char*>(json[keys::MqttServer]));
   SetMqttPortStr(static_cast<const char*>(json[keys::MqttPort]));
   SetApiLocation(static_cast<const char*>(json[keys::ApiLocation]));
+  SetLcdLedBrightnessSetpointStr(static_cast<const char*>(json[keys::LcdLedBrightnessSetpoint]));
   return true;
 }
 
@@ -65,6 +69,7 @@ bool Configuration::Write()
   json[keys::MqttServer] = m_mqttServer;
   json[keys::MqttPort] = m_mqttPortStr;
   json[keys::ApiLocation] = m_apiLocation;
+  json[keys::LcdLedBrightnessSetpoint] = m_lcdLedBrightnessSetpointStr;
 
   File configFile = SPIFFS.open(ConfigFileName, "w");
   if (!configFile)

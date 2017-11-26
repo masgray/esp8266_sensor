@@ -1,13 +1,17 @@
 #include "local_sensors.h"
 #include "display.h"
+#include "configuration.h"
 
 constexpr int GPIO_I2C_DATA PROGMEM = 2;
 constexpr int GPIO_I2C_CLK PROGMEM = 4;
+constexpr int AnalogSensorPin PROGMEM = A0;
 
-LocalSensors::LocalSensors(Display& display)
-  : m_display(display)
+LocalSensors::LocalSensors(Configuration& configuration, Display& display)
+  : m_configuration(configuration)
+  , m_display(display)
   , m_roomTHSensor(GPIO_I2C_DATA, GPIO_I2C_CLK)
   , m_timerForReadSensors(1000, TimerState::Started)
+  , m_timerForReadAnalogue(2000, TimerState::Started)
 {
 }
 
@@ -15,6 +19,7 @@ void LocalSensors::begin()
 {
   m_roomTHSensor.begin();
   m_timerForReadSensors.Start();
+  m_timerForReadAnalogue.Start();
 }
 
 void LocalSensors::loop()
@@ -25,6 +30,13 @@ void LocalSensors::loop()
       Print();
     else
       m_timerForReadSensors.Reset(TimerState::Started);
+  }
+  if (m_timerForReadAnalogue.IsElapsed())
+  {
+    int sensorValue = 1023 - analogRead(AnalogSensorPin);
+    m_roomLight.value = sensorValue * 100 / 1024;
+    m_roomLight.isGood = true;
+    m_display.TurnLcdLedOnOff(m_roomLight.value > m_configuration.GetLcdLedBrightnessSetpoint());
   }
 }
 
@@ -64,6 +76,12 @@ void LocalSensors::Print()
     m_display.SetBigFont();
     m_display.DrawNumber(m_roomHumidity.value, 160, 42, false);
     m_display.DrawArrow(m_roomHumidity.value, m_roomHumidity.r, 216, 47);
+  }
+
+  if (m_roomLight.isGood)
+  {
+    m_display.SetSmallFont();
+    m_display.DrawNumber(m_roomLight.value, 22, 298, false);
   }
 }
 
