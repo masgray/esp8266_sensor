@@ -3,8 +3,7 @@
 #include "sensor_value.h"
 #include "timer.h"
 
-//https://www.github.com/masgray/dht12
-#include <dht12.h>
+#include <BME280I2C.h>
 
 class Display;
 class Configuration;
@@ -25,7 +24,7 @@ private:
   Configuration& m_configuration;
   Display& m_display;
 
-  Dht12 m_roomTHSensor;
+  BME280I2C m_roomTHSensor;
   SensorValue m_roomTemperature;
   SensorValue m_roomHumidity;
   SensorValue m_roomLight;

@@ -9,7 +9,6 @@ constexpr int AnalogSensorPin PROGMEM = A0;
 LocalSensors::LocalSensors(Configuration& configuration, Display& display)
   : m_configuration(configuration)
   , m_display(display)
-  , m_roomTHSensor(GPIO_I2C_DATA, GPIO_I2C_CLK)
   , m_timerForReadSensors(1000, TimerState::Started)
   , m_timerForReadAnalogue(2000, TimerState::Started)
 {
@@ -17,7 +16,10 @@ LocalSensors::LocalSensors(Configuration& configuration, Display& display)
 
 void LocalSensors::begin()
 {
-  m_roomTHSensor.begin();
+  while (!m_roomTHSensor.begin(GPIO_I2C_DATA, GPIO_I2C_CLK))
+  {
+    delay(100);
+  }
   m_timerForReadSensors.Start();
   m_timerForReadAnalogue.Start();
 }
@@ -47,7 +49,11 @@ bool LocalSensors::Read()
   if (m_roomHumidity.isGood)
     m_roomHumidity.pred = m_roomHumidity.value;
 
-  if (!m_roomTHSensor.read(m_roomTemperature.value, m_roomHumidity.value))
+  float pressure = NAN;
+  m_roomTemperature.value = NAN;
+  m_roomHumidity.value = NAN;
+  m_roomTHSensor.read(pressure, m_roomTemperature.value, m_roomHumidity.value);
+  if (pressure == NAN && m_roomTemperature.value == NAN && m_roomHumidity.value == NAN)
   {
     m_roomTemperature.isGood = false;
     m_roomHumidity.isGood = false;
