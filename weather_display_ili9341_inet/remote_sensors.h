@@ -5,13 +5,16 @@
 #include "network.h"
 #include "chart.h"
 
+//https://bblanchon.github.io/ArduinoJson/
+#include <ArduinoJson.h>
+
 class Display;
 class Configuration;
 
 class RemoteSensors
 {
 public:
-  RemoteSensors(Configuration& configuration, Display& display);
+  RemoteSensors(Display& display);
 
   void begin();
   void loop();
@@ -29,9 +32,9 @@ private:
   void PrintCurrentWeather();
   bool ReadWeather(WeatherType weatherType);
   void AddToHistory();
+  void GetCurrentWeatherJsonParams(const JsonObject& root, SensorValue& rain, SensorValue& windSpeed, SensorValue& windDirection);
 
 private:
-  Configuration& m_configuration;
   Display& m_display;
   SensorValue m_outerTemperature;
   SensorValue m_outerHumidity;
@@ -65,5 +68,7 @@ private:
   History m_pressureHistory{};
   uint32_t m_historyTimeLastAdded = 0;
   uint32_t m_historyIndex = 0;
+
+  uint32_t m_currentDateTime = 0;
 };
 

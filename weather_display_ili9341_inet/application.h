@@ -15,7 +15,6 @@ public:
   void loop();
 
 private:
-  Configuration m_configuration;
   Network m_network;
   Display m_display;
   LocalSensors m_localSensors;

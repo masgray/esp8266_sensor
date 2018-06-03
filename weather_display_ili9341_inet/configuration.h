@@ -2,10 +2,10 @@
 
 #include "pass.h"
 
-struct Configuration
+namespace configuration
 {
-  const char* GetApName() const { return ssid; }
-  const char* GetPassw() const { return password; }
-  const char* GetApiLocation() const { return MyApiAppID; }
-};
+  constexpr const char* ApName = ssid;
+  constexpr const char* Passw = password;
+  constexpr const char* ApiLocation = "Moscow,ru";
+}
 

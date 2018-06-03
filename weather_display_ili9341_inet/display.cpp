@@ -42,6 +42,10 @@ void Display::begin()
   m_displayHeight = m_tft.getDisplayYSize();
 
   m_tft.drawBitmap(0, 0, m_displayWidth, m_displayHeight, Background);
+
+  m_tft.setColor(BackColor);
+  m_tft.fillRect(76, 294, 160, 318);
+  m_tft.setColor(VGA_WHITE);
 }
 
 void DrawStable(UTFT& tft, int x, int y)
@@ -114,6 +118,11 @@ void Display::DrawNumber(float number, int x, int y, bool withPlus, int precisio
     text = "+" + text;
   text += " ";
   m_tft.print(text.c_str(), x, y);
+}
+
+void Display::DrawText(const char* text, int x, int y)
+{
+  m_tft.print(text, x, y);
 }
 
 void Display::PrintError(const char* msg, word color)

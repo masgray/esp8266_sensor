@@ -1,7 +1,6 @@
 #include "network.h"
 #include "configuration.h"
 #include "display.h"
-#include "consts.h"
 #include "pass.h"
 
 #include <ArduinoOTA.h>
@@ -19,9 +18,8 @@ constexpr uint8_t DNS_PORT PROGMEM = 53;
   
 static bool UpdateStarted = false;
 
-Network::Network(Configuration& configuration, Display& display, RunState* runState)
-  : m_configuration(configuration)
-  , m_display(display)
+Network::Network(Display& display, RunState* runState)
+  : m_display(display)
   , m_runState(runState)
 {
 }
@@ -56,9 +54,6 @@ void Network::loop()
   if (m_runState->IsStopped())
     return;
   
-  if (m_dnsServer)
-    m_dnsServer->processNextRequest();
-
   if (m_isReset)
   {
     delay(1000);
@@ -69,36 +64,30 @@ void Network::loop()
 
 bool Network::Connected()
 {
-  return (m_wifiMode == WiFiMode::AccessPointMode ? true : WiFi.waitForConnectResult() == WL_CONNECTED);
-  //WiFi.status() == WL_CONNECTED
+  return (WiFi.waitForConnectResult() == WL_CONNECTED);
 }
 
-Network::WiFiMode Network::ConnectToWiFi()
+bool Network::ConnectedNoWait()
+{
+  return WiFi.status() == WL_CONNECTED;
+}
+
+bool Network::ConnectToWiFi()
 {
   m_display.PrintError(Connecting, VGA_LIME);
   WiFi.disconnect(true);
   WiFi.enableAP(false);
   WiFi.mode(WIFI_STA);
 
-  WiFi.begin(m_configuration.GetApName(), m_configuration.GetPassw());
+  WiFi.begin(configuration::ApName, configuration::Passw);
   String s = ConnectedStr;
   if (Connected())
   {
     s += WiFi.localIP().toString();
     m_display.PrintError(s.c_str(), VGA_LIME);
-    m_wifiMode = WiFiMode::ClientMode;
-    return m_wifiMode;
+    return true;
   }
-  
-  WiFi.enableAP(true);
-  WiFi.mode(WIFI_AP);
-  s += WiFi.softAPIP().toString();
-  m_display.PrintError(s.c_str());
-  m_wifiMode = WiFiMode::AccessPointMode;
-  m_dnsServer.reset(new DNSServer());
-  m_dnsServer->setErrorReplyCode(DNSReplyCode::NoError);
-  m_dnsServer->start(DNS_PORT, "*", WiFi.softAPIP());
-  return m_wifiMode;
+  return false;
 }
 
 void Network::Connect()

@@ -12,6 +12,7 @@ public:
   void begin();
 
   void DrawNumber(float number, int x, int y, bool withPlus, int precision = 0);
+  void DrawText(const char* text, int x, int y);
   void DrawArrow(float value, float valueR, int x, int y);
   void PrintError(const char* msg, word color = VGA_RED);
   void SetSmallFont();

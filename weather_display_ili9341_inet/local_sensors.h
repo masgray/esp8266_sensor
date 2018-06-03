@@ -11,7 +11,7 @@ class Configuration;
 class LocalSensors
 {
 public:
-  LocalSensors(Configuration& configuration, Display& display);
+  LocalSensors(Display& display);
 
   void begin();
   void loop();
@@ -21,7 +21,6 @@ private:
   void Print();
   
 private:
-  Configuration& m_configuration;
   Display& m_display;
 
   BME280I2C m_roomTHSensor;

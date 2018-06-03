@@ -6,9 +6,8 @@ constexpr int GPIO_I2C_DATA PROGMEM = 2;
 constexpr int GPIO_I2C_CLK PROGMEM = 4;
 constexpr int AnalogSensorPin PROGMEM = A0;
 
-LocalSensors::LocalSensors(Configuration& configuration, Display& display)
-  : m_configuration(configuration)
-  , m_display(display)
+LocalSensors::LocalSensors(Display& display)
+  : m_display(display)
   , m_timerForReadSensors(1000, TimerState::Started)
   , m_timerForReadAnalogue(2000, TimerState::Started)
 {
@@ -38,7 +37,7 @@ void LocalSensors::loop()
     int sensorValue = 1023 - analogRead(AnalogSensorPin);
     m_roomLight.value = sensorValue * 100 / 1024;
     m_roomLight.isGood = true;
-    m_display.TurnLcdLedOnOff(m_roomLight.value > m_configuration.GetLcdLedBrightnessSetpoint());
+    m_display.TurnLcdLedOnOff(m_roomLight.value > 15);
   }
 }
 
